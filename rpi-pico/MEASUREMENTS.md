@@ -94,13 +94,79 @@ clock, same firmware: the difference is the board's power supply (the Luckfox bo
 carries a 2 A buck-boost, the official one an LDO), and it shows up as jitter long
 before it shows up as failure.
 
+## Pico W (RP2040 B2, 2 MB flash)
+
+The RP2040 side of the same questions, on the one board here that is not a clone.
+Single core, iterations scaled at 24 per MHz so every run is about twelve seconds,
+flash divider 4 -- which is what pico-turbo derives for an RP2040 board it has no
+profile for, and what its voltage table picks at 420 MHz.  Every row reports
+`Correct operation validated`, and every row's flash was written, read back and
+compared byte for byte before it ran.
+
+| Clock | Voltage applied | Iterations | Iterations/sec | per MHz | Flash clock |
+|---|---|---|---|---|---|
+| 125 MHz | 1.10 V (sel 11, stock) | 3000 | 236.42 | 1.891 | 62.5 MHz (DIV 2, stock) |
+| 240 MHz | 1.10 V (sel 11) | 5760 | 453.93 | 1.891 | 60 MHz |
+| 264 MHz | 1.10 V (sel 11) | 6336 | 499.32 | 1.891 | 66 MHz |
+| 300 MHz | 1.20 V (sel 13) | 7200 | 567.41 | 1.891 | 75 MHz |
+| 360 MHz | 1.20 V (sel 13) | 8640 | 680.90 | 1.891 | 90 MHz |
+| 396 MHz | 1.25 V (sel 14) | 9504 | 748.99 | 1.892 | 99 MHz |
+| 420 MHz | 1.30 V (sel 15) | 10080 | 794.38 | 1.891 | 105 MHz |
+
+Two things fall out of that last column being the same all the way down.  The
+score is linear at 1.891 iterations/sec per MHz from 125 to 420 MHz, so this load
+never leaves the chip: the working set stays in the XIP cache even as the flash
+clock climbs from 60 to 105 MHz, and there is no memory wall in this range to fall
+off.  The 125 MHz row -- stock clock, stock voltage, stock divider -- landing on
+the same number is what makes that a measurement rather than a curve fitted to
+itself.
+
+The voltage column is the library's own table rather than something typed into the
+build: 1.10 V up to 266 MHz, 1.20 V above that, 1.25 V above 360, 1.30 V above
+396.  Every step of it landed on a clock this board ran, and the 264 MHz row
+sitting just under the 266 MHz boundary at stock voltage is the interesting one.
+420 MHz is also where the box ends -- 1.30 V is the highest the RP2040's regulator
+is documented for, and 420 MHz is the platform's own ceiling -- so its top row is
+the corner of the box, not a limit this board found.
+
+### Dual core soak, 420 MHz at 1.30 V
+
+Two contexts, 20160 iterations each (40320 reported), divider 4 for a 105 MHz
+flash clock, every run rebooting through the bootrom so no run inherits a warm
+chip:
+
+| Quantity | Result |
+|---|---|
+| Consecutive complete runs | 27, every one validated |
+| `Errors detected` | 0 |
+| Iterations/sec | mean 1417.301508, min 1417.221057, max 1417.305348 |
+| Spread | 0.0059% (19 distinct scores in 27 runs) |
+| Total time per run | 28.449 s, every run within 1.7 ms of that |
+| Clock state lines at 420000 kHz asked / configured / measured | 27 of 27 |
+
+The application numbers its runs from a watchdog scratch register, and those
+outlive a reset, so this soak's counter reads 4 through 30 rather than 1 through
+30: three runs belonged to an earlier attempt that a debugger halt killed
+mid-run.  What is claimed here is 27 consecutive complete runs, not 30.  Two
+consequences are worth keeping: an interrupted soak resumes where it stopped,
+which is deliberate, and a clean N-run soak needs the scratch cleared or the chip
+power-cycled.
+
+Dual core at 420 MHz, one context per core, 20160 iterations: 1417.30
+iterations/sec, which is 1.784x the single-core score.  That is the same 1.78x the
+RP2350 boards show, because a second core is limited by the memory the two share
+rather than by the core itself.
+
 ## Not measured yet
 
-- A Pico W, for the RP2040 side of the same questions.
+- The Pico W above 420 MHz: 440 MHz locked the AirMech RP2040 up, and whether
+  this board does the same is the RP2040 counterpart of the 570 MHz question.
+- The Pico W's flash divider above 105 MHz of flash clock (DIV 4 at 420 MHz); the
+  QSPI interface's own 133 MHz limit is what makes faster dividers meaningless.
 - The Luckfox board's full flash divider ladder (only "solid at 57 MHz, wrong at
   78.75 MHz" is known).
-- The official board's dual-core soak at 546 MHz and above, where the single core
-  still validates.
+- The RP2350 boards' dual-core soak above 520 MHz, where the single core still
+  validates.
 
 ## Method notes
 
