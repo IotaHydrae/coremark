@@ -87,7 +87,14 @@ elseif(${PICO_BOARD} STREQUAL "pico2" OR ${PICO_PLATFORM} STREQUAL "rp2350")
     set(PICO_BASE_SYS_CLK_KHZ 150000)
     set(COREMARK_BASE_ITRE 5000)
 endif()
-if(PICO_TURBO_SYS_CLK_KHZ)
+# What the library resolved to, not what it was asked for: a board profile in
+# pico-turbo's boards/*.cmake can supply the clock, and looking only at
+# PICO_TURBO_SYS_CLK_KHZ then sizes the work for the platform's stock frequency
+# while the chip runs far above it -- which CoreMark answers with "Errors detected"
+# for a run that came out under its own ten second rule.
+if(PICO_TURBO_RESOLVED_CLK_KHZ)
+    set(COREMARK_SYS_CLK_KHZ ${PICO_TURBO_RESOLVED_CLK_KHZ})
+elseif(PICO_TURBO_SYS_CLK_KHZ)
     set(COREMARK_SYS_CLK_KHZ ${PICO_TURBO_SYS_CLK_KHZ})
 else()
     set(COREMARK_SYS_CLK_KHZ ${PICO_BASE_SYS_CLK_KHZ})
