@@ -64,6 +64,14 @@ would say where the flash ceiling sits, and the lockup ended the walk early.
 
 ## Method notes
 
+- **Check one point end to end before running a sweep**: build, read the flash back,
+  and read the state line.  Two batches here waited minutes to learn what the first
+  point would have said in one -- one died in the flashing step, one locked the
+  board up -- and `-DPICO_TURBO_FLASH_CLK_DIV` is a good example of why the flash
+  step deserves a look before it is trusted.
+- **A flash divider the chip cannot survive is not recoverable in software**: the
+  divider is in boot stage 2, so every reset fails the same way (DIV 4 at 520 MHz
+  left an official Pico 2 in lockup until the BOOTSEL button was pressed).
 - **A clock that never moved is not a result about stability.**  The PLL produces a
   discrete set of frequencies; the SDK leaves the clock alone at the rest.  550 and
   560 MHz looked like failures until the run's own state line showed the CPU was
