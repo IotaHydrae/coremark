@@ -1,6 +1,58 @@
 # CoreMark port for Raspberry Pi Pico
 
-Currently, only single-core operation is supported.
+CoreMark runs on one core or on both (`-DCOREMARK_MULTITHREAD=2`).  Two cores
+are worth having: it is the same measurement with more current asked of the
+regulator, which is where a marginal voltage shows up, and it is where the
+overclock stops looking free.
+
+The clock, the core voltage and the flash divider belong to
+[pico-turbo](https://github.com/IotaHydrae/pico-turbo): this project used to
+carry its own overclocking profiles and its own divider arithmetic, and on an
+RP2350 that arithmetic asked for an odd divider the boot stage 2 refuses.
+
+```bash
+# one core at 520 MHz and 1.60 V
+cmake -S . -B build -DPICO_BOARD=pico2 \
+      -DPICO_TURBO_DIR=/path/to/pico-turbo \
+      -DPICO_TURBO_SYS_CLK_KHZ=520000 -DPICO_TURBO_VREG_VOLTAGE=VREG_VOLTAGE_1_60
+cmake --build build -j
+cmake --build build --target flash-erase    # erase, program, verify, run
+```
+
+Every run prints one line that says what the chip was doing, so a log is
+readable on its own -- including the clock measured by the hardware frequency
+counter, not just the one that was configured:
+
+```text
+PICO-TURBO: 520000 kHz asked, 520000 kHz configured, 520000 kHz measured,
+            vreg sel 19, flash 52000 kHz, clk_peri 520000 kHz, usb ok
+```
+
+| Option | Meaning |
+|---|---|
+| `COREMARK_ITERATIONS` | 0 (default) scales with the clock, and doubles with two contexts, so a run takes about twelve seconds -- CoreMark's own rule for a reportable result.  Set a number to compare two runs on identical work. |
+| `COREMARK_REPEAT` | Runs the benchmark this many times, rebooting through the watchdog between runs, so a soak is a build option.  ~50 runs is ten minutes. |
+| `COREMARK_MULTITHREAD` | Contexts: 2 puts one on each core. |
+| `PICO_TURBO_AUTOTUNE` | Search for the frequency and voltage instead of being given them. |
+
+Measured on a Pico 2 (RP2350A rev 2, heatsink), single core unless stated,
+`Correct operation validated` in every case:
+
+| Clock | Voltage | Iterations/sec | Notes |
+|---|---|---|---|
+| 150 MHz | 1.10 V | 422.71 | stock |
+| 300 MHz | 1.20 V | 845.41 | 2.00x |
+| 300 MHz | 1.20 V | 1512.07 | two cores, 1.79x that |
+| 400 MHz | 1.30 V | 1127.21 | 2.67x |
+| 520 MHz | 1.60 V | 1465.38 | 3.47x, three runs within 0.0001% |
+| 540 MHz | 1.60 V | 1521.74 | 3.60x |
+| 570 MHz | 1.60 V | -- | the same firmware does not bring up its USB |
+
+The scores scale with the clock and nothing else: the flash clock stays under
+60 MHz and the working set fits the XIP cache, so there is no memory wall to
+find.  The last row is the interesting one -- a pico-turbo search accepted
+570 MHz at 1.60 V and this benchmark cannot start there, which is the reason to
+accept a frequency with a long, mixed workload rather than a short self-check.
 
 Onboard LED behavior:
 - On: Test in progress
