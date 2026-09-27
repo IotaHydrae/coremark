@@ -52,9 +52,19 @@ Two boards from different vendors stop at the same place, so the edge is the
 chip's rather than either board's.  Scores are linear in the clock across the
 range (564/520 = 1.085x, 1589.37/1465.38 = 1.085x).
 
-A flash divider ladder on this board has one point so far: DIV 4 at 520 MHz (a
-130 MHz flash clock) locks it up, DIV 10 (52 MHz) is fine.  The middle points
-would say where the flash ceiling sits, and the lockup ended the walk early.
+The flash divider ladder on this board, fixed 520 MHz core at 1.60 V, every point
+written and read back before it was run:
+
+| Divider | Flash clock | Result |
+|---|---|---|
+| 4 | 130 MHz | locks the chip up; the BOOTSEL button is what brings it back |
+| 6 | 86.7 MHz | 1465.39 iterations/sec, validated |
+| 8 | 65 MHz | 1465.39, validated |
+| 10 | 52 MHz | 1465.38, validated |
+
+This board's flash ceiling is therefore between 86.7 and 130 MHz, and the Luckfox
+board -- same chip, different vendor -- failed at 78.75 MHz.  The flash ceiling
+belongs to the board, not the RP2350.
 
 ## Not measured yet
 
