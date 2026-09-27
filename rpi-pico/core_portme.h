@@ -154,6 +154,12 @@ typedef size_t         ee_size_t;
 #define USE_SOCKET  0
 #endif
 
+/* What the parallel contexts are, for CoreMark's report.  On a Pico they are the
+ * second core, launched with pico_multicore (see core_portme.c). */
+#ifndef PARALLEL_METHOD
+#define PARALLEL_METHOD "Pico second core"
+#endif
+
 /* Configuration : MAIN_HAS_NOARGC
         Needed if platform does not support getting arguments to main.
 
@@ -181,7 +187,9 @@ typedef size_t         ee_size_t;
 #endif
 
 /* Variable : default_num_contexts
-        Not used for this simple port, must contain the value 1.
+        How many contexts to run.  With MULTITHREAD == 1 this must stay 1; with 2
+        on a Pico it is the second core, which is what core_start_parallel()
+        below puts to work.
 */
 extern ee_u32 default_num_contexts;
 

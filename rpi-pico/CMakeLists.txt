@@ -19,35 +19,35 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-# This is the main CMakeLists file of the project. It is used to build the project
-# using the CMake build system. You can find the documentation of CMake at
-# https:#cmake.org/cmake/help/latest/index.html
+# CoreMark on a Pico, clocked by pico-turbo.
+#
+# The clock, the core voltage and the flash divider are pico-turbo's job: it
+# knows the order the regulator and the clock have to be changed in, it derives
+# the divider from the highest frequency the build can reach (and rounds it to
+# the even number both boot stages insist on), and with PICO_TURBO_AUTOTUNE it
+# searches for the frequency instead of being told one.  This project then only
+# has to run CoreMark and report what the chip was actually doing.
+#
+#   cmake -S . -B build -DPICO_BOARD=pico2 \
+#         -DPICO_TURBO_DIR=/path/to/pico-turbo \
+#         -DPICO_TURBO_SYS_CLK_KHZ=570000 -DPICO_TURBO_VREG_VOLTAGE=VREG_VOLTAGE_1_60
+#   cmake --build build -j
+#   cmake --build build --target flash      # erase, program, verify, run
+#
+# Compare two frequencies on identical work with -DCOREMARK_ITERATIONS=<n>;
+# left alone, the iteration count scales with the clock so that every run takes
+# about the same wall time (which is what a "CoreMark/MHz" style score wants).
 
 cmake_minimum_required(VERSION 3.13)
 
-# initialize the SDK based on PICO_SDK_PATH
-# note: this must happen before project()
 include(pico_sdk_import.cmake)
 
-# set the project name
 project(rpi-pico-coremark C CXX ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-SET(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -Wl,--print-memory-usage")
-SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--print-memory-usage")
-
-message(STATUS "===== Global C FLAGS =====")
-message(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
-message(STATUS "CMAKE_C_FLAGS_DEBUG: ${CMAKE_C_FLAGS_DEBUG}")
-message(STATUS "CMAKE_C_FLAGS_RELEASE: ${CMAKE_C_FLAGS_RELEASE}")
-
-message(STATUS "===== Global CXX FLAGS =====")
-message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
-message(STATUS "CMAKE_CXX_FLAGS_DEBUG: ${CMAKE_CXX_FLAGS_DEBUG}")
-message(STATUS "CMAKE_CXX_FLAGS_RELEASE: ${CMAKE_CXX_FLAGS_RELEASE}")
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--print-memory-usage")
 
 if (PICO_SDK_VERSION_STRING VERSION_LESS "2.0.0")
     message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.0.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
@@ -58,7 +58,6 @@ if (NOT DEFINED PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS)
     set(PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS 3000)
 endif()
 
-# initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 add_compile_options(-Wall
@@ -69,9 +68,18 @@ if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-Wno-maybe-uninitialized)
 endif()
 
-# Set all global variables here
-option(OVERCLOCK_ENABLED 0)    # 1: enable, 0: disable
+# --- the clock, the voltage and the flash divider: pico-turbo ----------------
+if(NOT DEFINED PICO_TURBO_DIR)
+    set(PICO_TURBO_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../pico-turbo" CACHE PATH
+        "where the pico-turbo checkout lives")
+endif()
+if(NOT EXISTS "${PICO_TURBO_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "pico-turbo not found at ${PICO_TURBO_DIR}: pass -DPICO_TURBO_DIR=<path>")
+endif()
+add_subdirectory(${PICO_TURBO_DIR} ${CMAKE_BINARY_DIR}/pico_turbo)
 
+# The frequency the score is reported against: what the library was asked for,
+# or the platform's stock clock when no overclocking was configured.
 if(${PICO_BOARD} STREQUAL "pico" OR ${PICO_PLATFORM} STREQUAL "rp2040")
     set(PICO_BASE_SYS_CLK_KHZ 125000)
     set(COREMARK_BASE_ITRE 3000)
@@ -79,76 +87,47 @@ elseif(${PICO_BOARD} STREQUAL "pico2" OR ${PICO_PLATFORM} STREQUAL "rp2350")
     set(PICO_BASE_SYS_CLK_KHZ 150000)
     set(COREMARK_BASE_ITRE 5000)
 endif()
+if(PICO_TURBO_SYS_CLK_KHZ)
+    set(COREMARK_SYS_CLK_KHZ ${PICO_TURBO_SYS_CLK_KHZ})
+else()
+    set(COREMARK_SYS_CLK_KHZ ${PICO_BASE_SYS_CLK_KHZ})
+endif()
 
-if(OVERCLOCK_ENABLED)
-
-    message(WARNING "Overclocking is enabled. This may damage your device. Use at own risk.")
-
-    if(${PICO_BOARD} STREQUAL "pico" OR ${PICO_PLATFORM} STREQUAL "rp2040")
-        # Overclocking profiles
-        #      SYS_CLK  | FLASH_CLK | Voltage
-        #  1  | 240MHz  |  120MHZ   |  1.10(V) (default, stable, recommended for most devices)
-        #  2  | 266MHz  |  133MHz   |  1.10(V)
-        #  3  | 360MHz  |  90MHz    |  1.20(V)
-        #  4  | 400MHz  |  100MHz   |  1.30(V)
-        #  5  | 416MHz  |  104MHz   |  1.30(V)
-        option(OVERCLOCK_PROFILE 1)
-
-        if(OVERCLOCK_PROFILE EQUAL 1)
-            set(SYS_CLK_KHZ 240000)             # CPU clock speed
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})    # Peripheral clock speed
-        elseif(OVERCLOCK_PROFILE EQUAL 2)
-            set(SYS_CLK_KHZ 266000)
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})
-        elseif(OVERCLOCK_PROFILE EQUAL 3)
-            set(SYS_CLK_KHZ 360000)
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})
-        elseif(OVERCLOCK_PROFILE EQUAL 4)
-            set(SYS_CLK_KHZ 400000)
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})
-        elseif(OVERCLOCK_PROFILE EQUAL 5)
-            set(SYS_CLK_KHZ 416000)
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})
-        else()
-            message(FATAL_ERROR "Invalid overclocking profile")
-        endif()
-    elseif(${PICO_BOARD} STREQUAL "pico2" OR ${PICO_PLATFORM} STREQUAL "rp2350")
-        # Overclocking profiles
-        #      SYS_CLK  | FLASH_CLK | Voltage
-        #  1  | 225MHz  |   75MHz   |  1.10(V) (default, stable, recommended for most devices)
-        #  2  | 366MHz  |  122MHz   |  1.20(V)
-        #  3  | 384MHz  |  128MHz   |  1.20(V)
-        #  4  | 480MHz  |  160MHz   |  1.50(V)
-        set(OVERCLOCK_PROFILE 1)
-
-        if(OVERCLOCK_PROFILE EQUAL 1)
-            set(SYS_CLK_KHZ 225000)             # CPU clock speed
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})    # Peripheral clock speed
-        elseif(OVERCLOCK_PROFILE EQUAL 2)
-            set(SYS_CLK_KHZ 366000)
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})
-        elseif(OVERCLOCK_PROFILE EQUAL 3)
-            set(SYS_CLK_KHZ 384000)
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})
-        elseif(OVERCLOCK_PROFILE EQUAL 4)
-            set(SYS_CLK_KHZ 480000)
-            set(PERI_CLK_KHZ ${SYS_CLK_KHZ})
-        else()
-            message(FATAL_ERROR "Invalid overclocking profile")
-        endif()
+# Iterations.  Zero (the default) leaves ITERATIONS undefined and lets CoreMark
+# calibrate: it runs for a second, then scales so the measured run is about ten
+# seconds -- which is what CoreMark's reporting rules ask for, at every clock and
+# without a formula to get wrong.  A fixed count is only useful to compare two
+# runs on identical work; note that a count that is fine at 150 MHz is under
+# CoreMark's ten seconds at 500 MHz, which it reports as "Errors detected" even
+# though the results were correct.
+# (The port's core_portme.c has a #ifndef ITERATIONS fallback, so ITERATIONS
+# cannot be left undefined and CoreMark cannot calibrate itself: the count is
+# computed here instead, from the clock, so that a run takes about twelve
+# seconds -- which is CoreMark's own rule for a reportable result.)
+if(NOT DEFINED COREMARK_ITERATIONS OR COREMARK_ITERATIONS EQUAL 0)
+    math(EXPR COREMARK_ITERATIONS
+        "${COREMARK_BASE_ITRE} * ${COREMARK_SYS_CLK_KHZ} / ${PICO_BASE_SYS_CLK_KHZ}")
+    if(COREMARK_MULTITHREAD GREATER 1)
+        # Two contexts share the machine and finish in about half the time, so
+        # the same iteration count would drop under CoreMark's ten seconds.
+        math(EXPR COREMARK_ITERATIONS "${COREMARK_ITERATIONS} * 2")
     endif()
+endif()
 
-else()  # OVERCLOCK_ENABLED
+# Repeat the whole benchmark this many times, rebooting between runs with the
+# watchdog and counting in its scratch registers.  Each run is a calibration plus
+# a ten second measurement, so ~50 repeats is a ten minute soak -- which is what
+# "stable" should be based on, rather than a single run.  A repeat count of 1
+# leaves the board blinking.
+if(NOT DEFINED COREMARK_REPEAT)
+    set(COREMARK_REPEAT 1)
+endif()
 
-    message(WARNING "Overclocking is disabled.")
-    set(SYS_CLK_KHZ ${PICO_BASE_SYS_CLK_KHZ}) # CPU clock speed
-    set(PERI_CLK_KHZ ${SYS_CLK_KHZ})    # Peripheral clock speed
-
-endif() # OVERCLOCK_ENABLED
+math(EXPR COREMARK_SYS_MHZ "${COREMARK_SYS_CLK_KHZ} / 1000")
+message(STATUS "coremark: ${COREMARK_SYS_MHZ} MHz, ${COREMARK_ITERATIONS} iterations")
 
 include_directories(. include)
 
-# user define common source files
 file(GLOB_RECURSE COMMON_SOURCES
     core_list_join.c
     core_main.c
@@ -158,10 +137,11 @@ file(GLOB_RECURSE COMMON_SOURCES
     core_util.c
 )
 
-# rest of your project
 add_executable(${PROJECT_NAME} ${COMMON_SOURCES})
 target_link_libraries(${PROJECT_NAME}
+    pico_turbo
     pico_bootsel_via_double_reset
+    pico_multicore
     pico_stdlib
 )
 target_include_directories(${PROJECT_NAME} PUBLIC .)
@@ -170,82 +150,70 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     string(REPLACE "\"" "\\\"" FLAGS_STR_ESCAPED "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE}")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     string(REPLACE "\"" "\\\"" FLAGS_STR_ESCAPED "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_DEBUG}")
-else()
-    
 endif()
 
-target_compile_definitions(${PROJECT_NAME}
-    PRIVATE
-    FLAGS_STR=\"${FLAGS_STR_ESCAPED}\"
-)
-
-math(EXPR ITERATIONS
-    "${COREMARK_BASE_ITRE} * ${SYS_CLK_KHZ} / ${PICO_BASE_SYS_CLK_KHZ}"
-)
+# Contexts to run.  The Pico has two cores, so 2 runs one CoreMark per core and
+# reports both: it is the same measurement with more current asked of the
+# regulator, which is where a marginal voltage shows up.
+if(NOT DEFINED COREMARK_MULTITHREAD)
+    set(COREMARK_MULTITHREAD 1)
+endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    ITERATIONS=${ITERATIONS}
-    DEFAULT_SYS_CLK_KHZ=${SYS_CLK_KHZ}
+    FLAGS_STR="${FLAGS_STR_ESCAPED}"
+    DEFAULT_SYS_CLK_KHZ=${COREMARK_SYS_CLK_KHZ}
+    MULTITHREAD=${COREMARK_MULTITHREAD}
+    COREMARK_REPEAT=${COREMARK_REPEAT}
 )
+target_compile_definitions(${PROJECT_NAME} PRIVATE ITERATIONS=${COREMARK_ITERATIONS})
+# CoreMark's memory method is left alone: MEM_STATIC is refused outright with more
+# than one context ("Cannot use a static data area with multiple contexts!"), so
+# the per-context blocks live in stack_memblock[TOTAL_DATA_SIZE * MULTITHREAD] in
+# main() -- a few kilobytes on core 0's stack, which is what the barebones port
+# expects and what the default stack has room for.
 
-# Note: If you are using a NOR flash like "w25q16". Just keep the following content.
-# The maximum speed of "w25q16" is 133MHz, However, the clock speed of XIP QSPI is divided from "sys_clk".
-# So, when your "sys_clk" is greater than 266MHz and default PICO_FLASH_SPI_CLKDIV=2, It will exceed the
-# maximum speed, because PICO_FLASH_SPI_CLKDIV must be even, So 4 is good for most purpose, Otherwise,
-# nothing should be done. These things will only useful when you overclocking the rp2040.
-if(${PICO_BOARD} STREQUAL "pico" OR ${PICO_PLATFORM} STREQUAL "rp2040")
-    if(${SYS_CLK_KHZ} GREATER 266000)
-        set(PICO_FLASH_SPI_CLKDIV 4)
-    else()
-        set(PICO_FLASH_SPI_CLKDIV 2)
-    endif()
-elseif(${PICO_BOARD} STREQUAL  "pico2" OR ${PICO_PLATFORM} STREQUAL  "rp2350")
-	set(PICO_FLASH_SPI_CLKDIV 3)
+# default | copy_to_ram | no_flash: copy_to_ram is what tells a flash-limited
+# result apart from a core-limited one.
+if(NOT DEFINED PICO_TURBO_BINARY_TYPE)
+    set(PICO_TURBO_BINARY_TYPE default)
 endif()
+pico_set_binary_type(${PROJECT_NAME} ${PICO_TURBO_BINARY_TYPE})
 
-math(EXPR FLASH_CLK_KHZ "${SYS_CLK_KHZ} / ${PICO_FLASH_SPI_CLKDIV}")
-math(EXPR FLASH_CLK_MHZ "${FLASH_CLK_KHZ} / 1000")
-math(EXPR SYS_CLK_MHZ "${SYS_CLK_KHZ} / 1000")
-message(WARNING "
-    CPU speed   : ${SYS_CLK_MHZ} MHz
-    Flash speed : ${FLASH_CLK_MHZ} MHz
-    ITERATIONS  : ${ITERATIONS}
-")
-target_compile_definitions(bs2_default PRIVATE PICO_FLASH_SPI_CLKDIV=${PICO_FLASH_SPI_CLKDIV})
-target_compile_definitions(${PROJECT_NAME} PRIVATE FLASH_CLK_KHZ=${FLASH_CLK_KHZ} PICO_FLASH_SPI_CLKDIV=${PICO_FLASH_SPI_CLKDIV})
+pico_enable_stdio_usb(${PROJECT_NAME} 1)
+pico_enable_stdio_uart(${PROJECT_NAME} 1)
+pico_add_extra_outputs(${PROJECT_NAME})
 
-pico_enable_stdio_usb(${PROJECT_NAME} 1)    # 0: disable, 1: enable
-pico_enable_stdio_uart(${PROJECT_NAME} 1)   # 0: disable, 1: enable
-
-pico_add_extra_outputs(${PROJECT_NAME}) # uf2 and more files
-pico_set_binary_type(${PROJECT_NAME} default) # options: default | copy_to_ram | no_flash
-
-# show target size info
 add_custom_target(
     print-memory-usage ALL
     COMMAND arm-none-eabi-size -G ${CMAKE_PROJECT_NAME}.elf
-    DEPENDS ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf
-    COMMENT "Print target size info"
     DEPENDS ${PROJECT_NAME}
+    COMMENT "Print target size info"
 )
 
-# add a firmware flash target
-if(${PICO_BOARD} STREQUAL "pico" OR ${PICO_PLATFORM} STREQUAL "rp2040")
-	add_custom_target(
-	    flash
-	    COMMAND openocd -f interface/cmsis-dap.cfg -c "adapter speed 10000"
-			    -f target/rp2040.cfg -s tcl -c "program ${CMAKE_PROJECT_NAME}.elf verify reset exit"
-	    DEPENDS ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf
-	    COMMENT "Flashing firmware using CMSIS-DAP Debugger..."
-	    DEPENDS ${PROJECT_NAME}
-	)
-elseif(${PICO_BOARD} STREQUAL  "pico2" OR ${PICO_PLATFORM} STREQUAL  "rp2350")
-	add_custom_target(
-	    flash
-	    COMMAND openocd -f interface/cmsis-dap.cfg -c "adapter speed 10000"
-		            -f target/rp2350.cfg -s tcl -c "program ${CMAKE_PROJECT_NAME}.elf verify reset exit"
-	    DEPENDS ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf
-	    COMMENT "Flashing firmware using CMSIS-DAP Debugger..."
-	    DEPENDS ${PROJECT_NAME}
-	)
+# Erase first, then program, then verify: openocd has been seen reporting
+# "Verified OK" here after writing only the first couple of kilobytes of the
+# image, which leaves the chip running whatever was there before.
+if(NOT DEFINED PICO_OPENOCD_TARGET)
+    if(${PICO_BOARD} STREQUAL "pico" OR ${PICO_PLATFORM} STREQUAL "rp2040")
+        set(PICO_OPENOCD_TARGET target/rp2040.cfg)
+    else()
+        set(PICO_OPENOCD_TARGET target/rp2350.cfg)
+    endif()
 endif()
+add_custom_target(
+    flash
+    COMMAND openocd -f interface/cmsis-dap.cfg -c "adapter speed 1000"
+            -f ${PICO_OPENOCD_TARGET}
+            -c "program ${CMAKE_PROJECT_NAME}.elf verify reset exit"
+    DEPENDS ${PROJECT_NAME}
+    COMMENT "Flashing firmware using CMSIS-DAP Debugger..."
+)
+add_custom_target(
+    flash-erase
+    COMMAND openocd -f interface/cmsis-dap.cfg -c "adapter speed 1000"
+            -f ${PICO_OPENOCD_TARGET}
+            -c "init" -c "halt" -c "flash probe 0" -c "flash erase_sector 0 0 1023"
+            -c "program ${CMAKE_PROJECT_NAME}.elf verify reset exit" -c "shutdown"
+    DEPENDS ${PROJECT_NAME}
+    COMMENT "Erasing the flash, then programming and verifying..."
+)

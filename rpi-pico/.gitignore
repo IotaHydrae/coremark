@@ -1,3 +1,1 @@
-.cache
-build
-build-pico2
+build*/
