@@ -46,6 +46,16 @@ cmake --build build -j
 cmake --build build --target flash-erase   # 先擦再写再校验
 ```
 
+一键跑完整套测量（时钟阶梯 + flash 分频阶梯 + 双核 + soak），接上探针即可，产出
+`report.md`、`results.json`（可断点续跑）和一份可用的 `boards/<board>.cmake`：
+
+```bash
+tools/probe.py --board pico_w                    # 默认：阶梯 + 双核 + 10 次 soak
+tools/probe.py --board pico2 --soak 30 --flash-ladder
+tools/probe.py --identify-only                   # 只认板子，不动它
+tools/probe.py --points 240000,300000 --soak 0   # 指定点、不跑 soak
+```
+
 | 开关 | 默认 | 作用 |
 | --- | --- | --- |
 | `COREMARK_ITERATIONS` | 0 | 0 = 按频率（双核 ×2）缩放，保证 ~12 s；给数字 = 固定次数做等量对比 |
@@ -83,9 +93,16 @@ clk_peri、USB 是否 48 MHz）—— 判定以它为准。
    时要反复重申握手，判定的基准始终是应用自己打的计数。
 8. **烧写和启动放进同一个 openocd 会话**，以 `reset run` 收尾：`resume` 会让旧镜像跑进刚被
    擦掉的区域而挂死，而 `reset run` 才是"启动新写的镜像"这个动作，两者都不留 halt 状态。
-9. **过快的 flash 分频会让板子变成软件复位救不回来的砖** ✗（boot2 里的分频每次复位都会
+9. **调试器会话收尾：真复位 + 释放核，缺一不可** ✗。实测对照（同一 ELF）：halt 过而不用
+   `reset run` 收尾 ⇒ 写完什么都不跑（这是 `tools/probe.py` 第一版的失败原因）；带 `reset run`
+   ⇒ 正常出分。另有一次带 `reset run` 仍不出分，PC `0xfffffffe`（double fault）、XIP 读出的
+   数据整条右移一个 nibble，而写入与校验都正常 ⇒ 推断是**回读 flash（`dump_image`）把 SSI
+   留在非读模式，vectreset 修不回来**；实测的救命路径是**真芯片复位**（擦空 → `2e8a:0003`
+   BOOTSEL → picotool 写入+重启 ✓）。`probe.py` 因此固定收尾为：清 `SCRATCH4` → 写看门狗
+   `CTRL` TRIGGER（RP2040 `0x40058000`、RP2350 `0x400D8000`）→ `reset run`。
+10. **过快的 flash 分频会让板子变成软件复位救不回来的砖** ✗（boot2 里的分频每次复位都会
    重演；实测 DIV 4 @520 MHz 只能按 BOOTSEL 回来）。
-10. **调试器用来定位**（PC 在 `core_list_find` = 在跑；`isr_hardfault` = 真挂；
+11. **调试器用来定位**（PC 在 `core_list_find` = 在跑；`isr_hardfault` = 真挂；
    PC 在 bootrom = 镜像没起来）。
 
 ## 结果与现状
