@@ -152,6 +152,14 @@ consequences are worth keeping: an interrupted soak resumes where it stopped,
 which is deliberate, and a clean N-run soak needs the scratch cleared or the chip
 power-cycled.
 
+The platform ceiling for RP2040 is 420 MHz, which is also where the library's
+voltage table ends (1.30 V).  Raising the ceiling out of the way
+(`-D_PLATFORM_MAX_KHZ=440000`, which the board files allow from the command line)
+one more point was tried: **440 MHz at 1.30 V, 832.21 iterations/sec, 1.891 per
+MHz, validated**.  The AirMech RP2040 board locked up at that clock, so the top of
+the RP2040 range is a property of the board and not of the chip -- unlike the two
+RP2350 boards here, which both stop at 564 passing and 570 failing.
+
 Dual core at 420 MHz, one context per core, 20160 iterations: 1417.30
 iterations/sec, which is 1.784x the single-core score.  That is the same 1.78x the
 RP2350 boards show, because a second core is limited by the memory the two share
