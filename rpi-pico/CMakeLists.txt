@@ -181,6 +181,14 @@ pico_set_binary_type(${PROJECT_NAME} ${PICO_TURBO_BINARY_TYPE})
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 1)
+# Wait for a host to open the port before printing anything.  Without this the
+# SDK drops every character written while nobody is attached, so a run whose
+# reader is a second late prints nothing at all -- and a soak that reboots
+# between runs is exactly when a reader is a second late.  With it, each boot
+# waits for the port instead of the run being silently lost.  The wait happens in
+# portable_init(), before CoreMark starts timing, so it costs nothing but time.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=20000)
 pico_add_extra_outputs(${PROJECT_NAME})
 
 add_custom_target(
