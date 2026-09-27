@@ -66,11 +66,41 @@ This board's flash ceiling is therefore between 86.7 and 130 MHz, and the Luckfo
 board -- same chip, different vendor -- failed at 78.75 MHz.  The flash ceiling
 belongs to the board, not the RP2350.
 
+### Dual core soak, 520 MHz at 1.60 V
+
+Two contexts, 34666 iterations each (69332 total), DIV 8 for a 65 MHz flash clock,
+**fifty consecutive runs**, each one rebooting through the bootrom between runs so
+no run inherits a warm chip:
+
+| Quantity | Result |
+|---|---|
+| Runs that produced a score | 50 of 50 |
+| Runs that validated (`Correct operation validated`) | 50 of 50 |
+| `Errors detected` | 0 |
+| Iterations/sec | mean 2622.081163, min 2622.078177, max 2622.083036 |
+| Spread | **0.0002%** (two parts per million; 30 distinct scores in 50 runs) |
+| Total time per run | 26.4416 s, every run within 49 microseconds of that |
+| Clock state lines at 520000 kHz asked / configured / measured | 50 of 50 |
+| Wall clock | 1677 s for the whole soak (~28 minutes) |
+
+The application's own `COREMARK-REPEAT: run 50 of 50` counter and its
+`all 50 runs finished` line agree with the fifty scores the console reader caught,
+which is what makes "50 of 50" a statement about the chip rather than about the
+reader.
+
+Against the Luckfox board's 2612.7 iterations/sec (mean of 36 runs, 0.39% spread)
+this board is 0.36% faster and three orders of magnitude steadier.  Same chip, same
+clock, same firmware: the difference is the board's power supply (the Luckfox board
+carries a 2 A buck-boost, the official one an LDO), and it shows up as jitter long
+before it shows up as failure.
+
 ## Not measured yet
 
 - A Pico W, for the RP2040 side of the same questions.
-- The flash divider ladder's middle points (DIV 6 and 8 on both boards).
-- Three of the PLL points between 540 and 570 MHz: 546, 552, 558, 564.
+- The Luckfox board's full flash divider ladder (only "solid at 57 MHz, wrong at
+  78.75 MHz" is known).
+- The official board's dual-core soak at 546 MHz and above, where the single core
+  still validates.
 
 ## Method notes
 
@@ -94,6 +124,14 @@ belongs to the board, not the RP2350.
   "Verified OK"; the `flash-erase` target erases first, programs, verifies, and
   leaves the check where a human can repeat it.  Read the flash back and compare
   when in doubt.
+- **Output written while no host is attached is dropped, not buffered.**  The SDK's
+  USB stdio discards characters when nobody has the port open, and a soak reboots
+  between runs, so a reader that re-attaches a second late loses a whole run's log.
+  It looks like a counter that read 3 with only two logs to go with it; the fix is
+  `PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS`, which makes each boot wait for the port
+  before it starts (the wait is before the timing, so it costs nothing).  Judge a
+  soak by the counter the application prints, not by the lines the reader happened
+  to catch.
 - **Reading state over SWD disturbs the run** (it halts the core, and the SDK's
   watchdog pauses on debug), so the console is the channel to measure with, and
   the port prints everything it wants judged there.
