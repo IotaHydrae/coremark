@@ -159,8 +159,15 @@ volatile ee_s32 seed5_volatile = 0;
 /** Define Host specific (POSIX), or target specific global time variables. */
 static CORETIMETYPE start_time_val, stop_time_val;
 
-/* The default user led pin on pico board */
+/* The board's user led, where the board has one to drive.  A Pico W does not:
+ * its led hangs off the wireless chip, and PICO_DEFAULT_LED_PIN is not defined,
+ * so the run reports progress only in the console there. */
+#if defined(PICO_DEFAULT_LED_PIN)
 static int led = PICO_DEFAULT_LED_PIN;
+#define PORT_HAS_LED 1
+#else
+#define PORT_HAS_LED 0
+#endif
 
 /* Function : start_time
         This function will be called right before starting the timed portion of
@@ -274,8 +281,12 @@ void portable_init(core_portable *p, int *argc, char *argv[])
 			  st.usb_ok ? "ok" : "WRONG");
 	}
 
+#if PORT_HAS_LED
 	gpio_init(led);
 	gpio_set_dir(led, GPIO_OUT);
+#else
+	ee_printf("(no user led on this board: %s)\n", PICO_BOARD);
+#endif
 
 	if (sizeof(ee_ptr_int) != sizeof(ee_u8 *)) {
 		ee_printf(
@@ -287,7 +298,9 @@ void portable_init(core_portable *p, int *argc, char *argv[])
 			"ERROR! Please define ee_u32 to a 32b unsigned type!\n");
 	}
 	p->portable_id = 1;
+#if PORT_HAS_LED
 	gpio_put(led, 1);
+#endif
 }
 /* Function : portable_fini
         Target specific final code
@@ -337,9 +350,13 @@ void portable_fini(core_portable *p)
 #endif
 
 	for (;;) {
+#if PORT_HAS_LED
 		gpio_put(led, 0);
 		sleep_ms(200);
 		gpio_put(led, 1);
+#else
+		sleep_ms(200);
+#endif
 		sleep_ms(200);
 	}
 }
