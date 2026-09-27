@@ -54,6 +54,9 @@ find.  The last row is the interesting one -- a pico-turbo search accepted
 570 MHz at 1.60 V and this benchmark cannot start there, which is the reason to
 accept a frequency with a long, mixed workload rather than a short self-check.
 
+Measured results on the boards this was run on, and the method notes that go with
+them: [MEASUREMENTS.md](MEASUREMENTS.md).
+
 Onboard LED behavior:
 - On: Test in progress
 - Blinking: Test complete
