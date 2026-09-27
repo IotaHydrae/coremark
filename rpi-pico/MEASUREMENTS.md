@@ -34,10 +34,32 @@ The board's flash part is a Puya PY25Q32HB.  This board's flash clock ceiling is
 somewhere between 57 and 78.75 MHz (see the pico-turbo notes); the divider ladder
 that would locate it is not run yet.
 
+## Official Pico 2 (RP2350A, its own flash part)
+
+Same port, same iteration rule, 1.60 V, single core, all `Correct operation
+validated`:
+
+| Clock | Iterations/sec | Notes |
+|---|---|---|
+| 520 MHz | 1465.38 | within 0.0002% of the Luckfox board's 1465.38 |
+| 546 MHz | 1538.64 | |
+| 552 MHz | 1555.56 | |
+| 558 MHz | 1572.47 | |
+| 564 MHz | 1589.37 | the highest that runs |
+| 570 MHz | does not run | verified: the flash matched the build exactly and the core was in `isr_hardfault` |
+
+Two boards from different vendors stop at the same place, so the edge is the
+chip's rather than either board's.  Scores are linear in the clock across the
+range (564/520 = 1.085x, 1589.37/1465.38 = 1.085x).
+
+A flash divider ladder on this board has one point so far: DIV 4 at 520 MHz (a
+130 MHz flash clock) locks it up, DIV 10 (52 MHz) is fine.  The middle points
+would say where the flash ceiling sits, and the lockup ended the walk early.
+
 ## Not measured yet
 
-- An official Pico 2, and a Pico W for the RP2040 side of the same questions.
-- The flash divider ladder (a fixed CPU clock with DIV 4, 6, 8, 10, 12).
+- A Pico W, for the RP2040 side of the same questions.
+- The flash divider ladder's middle points (DIV 6 and 8 on both boards).
 - Three of the PLL points between 540 and 570 MHz: 546, 552, 558, 564.
 
 ## Method notes
