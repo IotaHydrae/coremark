@@ -14,3 +14,7 @@ rpi-pico/build*/
 # it is throwaway -- but it also holds a complete cmake build tree, so it must not
 # be one `git add -A` away from being committed.
 probe-*/
+
+# Python bytecode, from importing the tool rather than running it.
+__pycache__/
+*.pyc
