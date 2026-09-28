@@ -2,9 +2,18 @@
 
 本仓库的工作规则，供 AI agent（以及人）在改动前先读一遍。
 
-**实测结果在 [`rpi-pico/MEASUREMENTS.md`](rpi-pico/MEASUREMENTS.md)**（本仓库）与
-[pico-turbo 的 measurements](https://github.com/IotaHydrae/pico-turbo/blob/main/docs/measurements.md)
-（时钟/电压/flash 那一侧）。本文只写约束和入口。
+**实测结果**：[`RANKINGS.md`](RANKINGS.md) 是总表（天梯：每块板的最佳已验证配置、每时钟
+效率、跨平台换算、soak 记录、各自的墙）；[`rpi-pico/MEASUREMENTS.md`](rpi-pico/MEASUREMENTS.md)
+是逐块板的原始表格；时钟/电压/flash 那一侧的解读在
+[pico-turbo 的 measurements](https://github.com/IotaHydrae/pico-turbo/blob/main/docs/measurements.md)。
+
+## 这个仓库是什么，以及结果去哪儿
+
+**本仓库是测试台**：它的职责是找出芯片/板子在哪儿不再可靠，并留下一个**已知可用**的配置。
+测出来的稳定配置**要回流到 [pico-turbo](https://github.com/IotaHydrae/pico-turbo)**，落成
+`boards/<board>.cmake`（上限 + 档位 + 默认档）—— 因为时钟、电压、flash 分频属于应用真正
+链接的那个库，而不是测量它们用的 benchmark。`tools/probe.py` 就是这条回路的一条命令：
+测量 → 出报告 → 提议 `boards/<board>.cmake`。凡是在这里下的结论，都要在那边有落点。
 
 ---
 
