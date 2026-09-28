@@ -56,7 +56,7 @@ The board's flash part is a Puya PY25Q32HB.  This board's flash clock ceiling is
 somewhere between 57 and 78.75 MHz (see the pico-turbo notes); the divider ladder
 that would locate it is not run yet.
 
-## Official Pico 2 (RP2350A, its own flash part)
+## Official Pico 2 (RP2350A rev 2 / A2, Winbond W25Q32FV/JV 4 MB)
 
 Same port, same iteration rule, 1.60 V, single core, all `Correct operation
 validated`:
@@ -69,6 +69,13 @@ validated`:
 | 558 MHz | 1572.47 | |
 | 564 MHz | 1589.37 | the highest that runs |
 | 570 MHz | does not run | verified: the flash matched the build exactly and the core was in `isr_hardfault` |
+
+Both cores change that edge.  At 520 MHz two contexts ran 50 consecutive times
+(above); at 546 MHz the run hangs joining core 1 -- the program counter was found in
+`core_stop_parallel`, so core 0 was waiting for a core 1 that never came back -- and
+at 564 MHz with two contexts the board hard-faults before printing its first line.
+One core validates to 564 and the dual-core configuration that was soaked is 520, so
+the second core costs this chip about 40 MHz of its ceiling.
 
 Two boards from different vendors stop at the same place, so the edge is the
 chip's rather than either board's.  Scores are linear in the clock across the
@@ -116,7 +123,7 @@ clock, same firmware: the difference is the board's power supply (the Luckfox bo
 carries a 2 A buck-boost, the official one an LDO), and it shows up as jitter long
 before it shows up as failure.
 
-## Pico W (RP2040 B2, 2 MB flash)
+## Pico W (RP2040 B2, Winbond W25Q16JV 2 MB)
 
 The RP2040 side of the same questions, on the one board here that is not a clone.
 Single core, iterations scaled at 24 per MHz so every run is about twelve seconds,

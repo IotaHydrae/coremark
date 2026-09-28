@@ -21,6 +21,20 @@ first.  The method, and the reasons for it, are in
 
 ---
 
+## 0. The boards on this bench
+
+| Board | Chip | Flash | How the flash part is known |
+|---|---|---|---|
+| Official Pico 2 | RP2350 rev 2 (A2) | **Winbond W25Q32FV/JV, 4 MB** | measured: openocd's probe reports `win w25q32fv/jv id = 0x1640ef size = 4096 KiB` over SWD |
+| Luckfox Pico 2 | RP2350A rev 2 | **Puya PY25Q32HB, 4 MB** | the vendor's board description -- *not* measured here; its JEDEC id wants reading when the board is next connected |
+| Official Pico W | RP2040 rev 2 (B2) | **Winbond W25Q16JV, 2 MB** | measured: `win w25q16jv id = 0x1540ef size = 2048 KiB` |
+| AirMech RP2040 | RP2040 | unknown | never probed; its numbers here are pico-turbo tiers, not CoreMark rows |
+
+The flash part matters more than it looks.  It is one of the two things a board file
+is really about -- the other being the supply -- and it is why `boards/pico_w.cmake`
+carries a 110 MHz flash ceiling while `boards/pico2.cmake`, shared by an official board
+and a clone with different flash parts, has to carry the conservative one.
+
 ## 1. Best validated configuration, per board
 
 Ranked by single-core score, which is the currency every board here has.
@@ -39,6 +53,8 @@ Dual-core rows, same boards:
 | Board | Clock | Voltage | Cores | CoreMark 1.0 | vs one core |
 |---|---|---|---|---|---|
 | Official Pico 2 | 520 MHz | 1.60 V | 2 | **2622.08** | 1.789x |
+| Official Pico 2 | 546 MHz | 1.60 V | 2 | *(hangs joining core 1: PC in `core_stop_parallel`)* | -- |
+| Official Pico 2 | 564 MHz | 1.60 V | 2 | *(hard-faults before it prints anything)* | -- |
 | Luckfox Pico 2 | 520 MHz | 1.60 V | 2 | 2612.70 | 1.786x |
 | Official Pico W | 440 MHz | 1.30 V | 2 | **1484.79** | 1.784x |
 | Official Pico W | 420 MHz | 1.30 V | 2 | 1417.30 | 1.784x |
@@ -100,6 +116,7 @@ chip:
 | Board | Configuration | Runs | Validated | Spread | Mean |
 |---|---|---|---|---|---|
 | Official Pico 2 | 520 MHz, 1.60 V, 2 cores | 50 | 50 | 0.0002% | 2622.081163 |
+| Official Pico 2 | 564 MHz, 1.60 V, 2 cores | 30 attempted | **0** -- it never ran: hard fault before its first line of output | -- |
 | Luckfox Pico 2 | 520 MHz, 1.60 V, 2 cores | 36 | 36 | 0.39% | 2612.7 |
 | Official Pico W | 440 MHz, 1.30 V, 2 cores | 30 | 30 | 0.0009% | 1484.793434 |
 | Official Pico W | 440 MHz, 1.30 V, 2 cores (through the board file) | 10 | 10 | 0.0008% | 1484.788171 |
@@ -114,7 +131,7 @@ as jitter long before it shows up as failure.
 
 | Board | Highest validated clock | First clock that failed | Flash ceiling |
 |---|---|---|---|
-| Official Pico 2 | 564 MHz | 570 MHz (`isr_hardfault`, flash verified) | between 86.7 and 130 MHz (DIV 6 good, DIV 4 locks up) |
+| Official Pico 2 | 564 MHz single core; **520 MHz with two** | 570 MHz (`isr_hardfault`, flash verified); 546 MHz with two cores hangs in `core_stop_parallel`, 564 with two hard-faults | between 86.7 and 130 MHz (DIV 6 good, DIV 4 locks up) |
 | Luckfox Pico 2 | 564 MHz | 570 MHz (does not bring up USB) | between 57 and 78.75 MHz |
 | Official Pico W | **440 MHz** (see below) | 460 MHz untested | ≥110 MHz (DIV 4 at 440 MHz, soaked); DIV 2 = 210 MHz hangs, past the QSPI interface's 133 MHz |
 | AirMech RP2040 | 420 MHz | 440 MHz (locks up) | 105 MHz (DIV 4) |
@@ -132,18 +149,17 @@ assumed, which is what `tools/probe.py` is for.
 | Board | pico-turbo board file | Carries |
 |---|---|---|
 | Official Pico W | `boards/pico_w.cmake` | ceiling 440 MHz, flash 110 MHz; profiles safe 240 / fast 300 / turbo 360 / **extreme 440** -- and extreme is the file's **default**, so `-DPICO_BOARD=pico_w` with nothing else applies the soaked configuration |
-| Official Pico 2, Luckfox Pico 2 | `boards/pico2.cmake` | ceiling 600 MHz, flash 60 MHz; profiles safe 225 / fast 300 / turbo 366 / extreme 512 |
+| Official Pico 2, Luckfox Pico 2 | `boards/pico2.cmake` | ceiling 564 MHz, flash 60 MHz; profiles safe 300 / fast 400 / **turbo 520** (both cores, soaked) / extreme 564 (one core only, and the file says so).  No default profile: the name is shared with clones whose flash and supply differ |
 | AirMech RP2040, plain Pico | `boards/pico.cmake` | ceiling 420 MHz; profiles safe 240 / turbo 360 / extreme 400 |
 
 Two gaps are visible in that table, and both are on purpose:
 
-* `boards/pico2.cmake`'s extreme profile is 512 MHz while the measurements here say
-  564 MHz validates.  Refreshing it wants a soak at 564 first (section 4 has none),
-  because a configuration that is going to be handed to applications should have
-  been repeated, not just passed once.
 * `boards/pico.cmake` describes a plain Pico that has not been on this bench at all;
   its numbers are inherited expectations, and `tools/probe.py --board pico` is one
   command away from replacing them with measurements.
+* The second core costs about 40 MHz of headroom on this chip: 520 MHz was soaked
+  with two cores and 546 already fails, while one core validates to 564.  A single
+  number per board would hide that, which is why the dual-core rows above exist.
 
 ## 7. Reading these numbers honestly
 
