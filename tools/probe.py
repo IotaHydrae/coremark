@@ -395,6 +395,8 @@ class Probe:
 
     # ---- bookkeeping (a probe that can be interrupted is a probe you can use) --
     def key(self, khz, div, mt, rep):
+        if self.args.profile:
+            return "profile:%s/%d/%d" % (self.args.profile, mt, rep)
         return "%d/%s/%d/%d" % (khz, div or "auto", mt, rep)
 
     def load(self):
@@ -445,13 +447,23 @@ class Probe:
             log("  %d kHz: already measured (%s), skipping" % (khz, rec["result"]))
             return rec
 
-        log("  %d kHz, DIV %s, %d core(s), %d run(s)" % (khz, div or "auto", mt, rep))
-        extra = ["-DPICO_TURBO_SYS_CLK_KHZ=%d" % khz,
-                 "-DCOREMARK_MULTITHREAD=%d" % mt, "-DCOREMARK_REPEAT=%d" % rep]
-        if div:
-            extra.append("-DPICO_TURBO_FLASH_CLK_DIV=%d" % div)
-        if self.args.allow_above_ceiling:
-            extra.append("-D_PLATFORM_MAX_KHZ=%d" % khz)
+        if self.args.profile:
+            log("  profile %s, %d core(s), %d run(s)" % (self.args.profile, mt, rep))
+        else:
+            log("  %d kHz, DIV %s, %d core(s), %d run(s)" % (khz, div or "auto", mt, rep))
+        extra = ["-DCOREMARK_MULTITHREAD=%d" % mt, "-DCOREMARK_REPEAT=%d" % rep]
+        if self.args.profile:
+            # The board file owns the clock, the voltage and the divider here; the
+            # expected clock comes from what the library says it resolved to, read
+            # out of the configure output below.
+            if self.args.profile != "default":
+                extra.append("-DPICO_TURBO_PROFILE=%s" % self.args.profile)
+        else:
+            extra.append("-DPICO_TURBO_SYS_CLK_KHZ=%d" % khz)
+            if div:
+                extra.append("-DPICO_TURBO_FLASH_CLK_DIV=%d" % div)
+            if self.args.allow_above_ceiling:
+                extra.append("-D_PLATFORM_MAX_KHZ=%d" % khz)
 
         rec = {"khz": khz, "div": div, "mt": mt, "rep": rep,
                "stamp": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -465,6 +477,11 @@ class Probe:
         m = re.search(r"^-- pico-turbo: (.*)$", out, re.M)
         if m:
             log("    %s" % m.group(1))
+            if self.args.profile:
+                r = re.search(r"pico-turbo: (\d+) MHz", out)
+                if r:
+                    rec["khz"] = khz = int(r.group(1)) * 1000
+                    log("    the board file resolved to %d kHz" % khz)
         elf = os.path.join(self.build, "rpi-pico-coremark.elf")
 
         markers = ["all %d runs finished" % rep] if rep > 1 else ["CoreMark 1.0 :"]
@@ -690,6 +707,12 @@ def soak(p, args, top, mt):
 # --------------------------------------------------------------------------
 
 def report(p, args, ident, ladder, bad, flashes, dual, soak_rec, pll_skipped, untried):
+    profile_note = ("Measured through the board file rather than by pinning a clock: the build "
+                    "was given %s and nothing else, so what it ran is whatever "
+                    "boards/%s.cmake resolved to."
+                    % ("no profile or clock (the board file's own default)"
+                       if args.profile == "default" else "profile '%s'" % args.profile,
+                       args.board)) if args.profile else None
     top = ladder[-1] if ladder else None
     L = []
     A = L.append
@@ -707,6 +730,9 @@ def report(p, args, ident, ladder, bad, flashes, dual, soak_rec, pll_skipped, un
     A("the clock that was asked for.  A point that fails is not interpreted; the walk")
     A("stops there and the board is put back to the last image that passed.")
     A("")
+    if profile_note:
+        A(profile_note)
+        A("")
     A("## Identity")
     A("")
     A("| Field | Value |")
@@ -956,6 +982,10 @@ def main():
     ap.add_argument("--points", default=None, help="comma separated kHz (or MHz), instead of the platform list")
     ap.add_argument("--divider", type=int, default=None,
                     help="pin the flash divider (default: let pico-turbo derive it)")
+    ap.add_argument("--profile", nargs="?", const="default", default=None,
+                    help="measure one board-file profile instead of a clock ladder: "
+                         "--profile turbo, or --profile (bare) for whatever the board "
+                         "file defaults to; nothing else is passed to the build")
     ap.add_argument("--mt", type=int, default=2, help="contexts for the dual-core phase; 1 skips it")
     ap.add_argument("--soak", type=int, default=10, help="runs in the soak phase; 0 or 1 skips it")
     ap.add_argument("--flash-ladder", action="store_true", help="also walk the flash divider")
@@ -1021,16 +1051,25 @@ def main():
     if args.identify_only:
         return 0
 
-    log("\n== First point, the stock clock: the whole path has to work once before "
-        "any of this is worth the time")
+    if args.profile:
+        log("\n== One configuration, straight from the board file: %s"
+            % (args.profile if args.profile != "default" else "its default profile"))
+    else:
+        log("\n== First point, the stock clock: the whole path has to work once before "
+            "any of this is worth the time")
     base = p.point(PLATFORM[family]["stock"], args.divider, 1, 1)
     if not p.good(base):
         log("  the stock clock did not pass, so nothing above it is worth trying")
         report(p, args, ident, [], base, [], None, None, [], [])
         return 1
 
-    got, bad, pll_skipped, untried = cpu_ladder(p, args, base)
-    ladder = [base] + got
+    if args.profile:
+        # One configuration, owned by the board file: the ladder would only measure
+        # clocks the board file does not describe.
+        ladder, bad, pll_skipped, untried = [base], None, [], []
+    else:
+        got, bad, pll_skipped, untried = cpu_ladder(p, args, base)
+        ladder = [base] + got
     top = ladder[-1]
     flashes = flash_ladder(p, args, top) if args.flash_ladder else []
     div_top = top
