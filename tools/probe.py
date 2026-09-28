@@ -374,10 +374,29 @@ class Debugger:
         log_path = os.path.join(self.logs_dir, tag + ".log")
         out = []
 
-        # 1. blank the flash, so the bootrom comes up instead of the old image
-        rc, o = self.ocd(["init", "halt", "flash erase_sector 0 0 last",
-                          "reset run", "shutdown"], timeout=timeout)
-        out.append(o)
+        # 1. blank the flash, so the bootrom comes up instead of the old image.
+        #    Checked and retried, because openocd's flash driver borrows a 64 KB
+        #    work area in SRAM (0x20010000 on an RP2350) and has been seen to fail
+        #    to allocate it -- "Could not allocate stack for flash programming code"
+        #    -- when the application that was running had just been halted.  When
+        #    that happens the flash is *not* erased, picotool then writes into a
+        #    region that still holds the old image, and the read-back in step 3
+        #    catches it: the point is thrown away rather than interpreted, which is
+        #    right, but it costs a run that a retry would have saved.
+        erased = False
+        for attempt in range(3):
+            rc, o = self.ocd(["init", "halt", "flash erase_sector 0 0 last",
+                              "reset run", "shutdown"], timeout=timeout)
+            out.append(o)
+            if "erased sectors" in o and "Could not allocate stack" not in o:
+                erased = True
+                break
+            out.append("erase attempt %d did not take; retrying" % (attempt + 1))
+            time.sleep(1)
+        if not erased:
+            out.append("the flash could not be blanked, so the bootrom never came up")
+            open(log_path, "w").write("\n".join(out))
+            return False, "\n".join(out), rb
         deadline = time.time() + 20
         while time.time() < deadline and not self._bootsel_present():
             time.sleep(0.5)
@@ -733,8 +752,19 @@ def flash_ladder(p, args, top):
     div0 = div0 or PLATFORM[p.family]["boot2_div"]
     if div0 % 2:
         div0 += 1
-    cands = [div0, div0 - 2, div0 - 4, div0 + 2]
-    cands = [d for d in dict.fromkeys(cands) if d >= 2 and d % 2 == 0]
+    # The step is 1 where the family's boot stage 2 takes odd dividers.  Checked
+    # against the SDK sources: the RP2040's w25q080 and at25sf128a carry #error
+    # PICO_FLASH_SPI_CLKDIV must be even, the RP2350's w25q080 does not (only a
+    # maximum), and three Waveshare RP2350 boards ship 3.  A board file may still be
+    # stricter than the silicon -- if it is, the point comes back as a build failure,
+    # which the ladder treats as "not a fact about the chip".
+    step = 1 if p.family == "rp2350" else 2
+    cands = [div0, div0 - step, div0 - 2 * step, div0 + step]
+    cands = [d for d in dict.fromkeys(cands) if d >= 2]
+    if step == 2:
+        cands = [d for d in cands if d % 2 == 0]
+    else:
+        log("   (RP2350: the boot stage 2 takes odd dividers, so the ladder steps by 1)")
     # Beyond the QSPI interface's own 133 MHz there is nothing to learn about this
     # board -- the failure is guaranteed by the interface, not by the flash part --
     # and walking into it costs a lockup and a recovery.  Measured, the hard way:

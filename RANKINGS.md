@@ -116,7 +116,8 @@ chip:
 | Board | Configuration | Runs | Validated | Spread | Mean |
 |---|---|---|---|---|---|
 | Official Pico 2 | 520 MHz, 1.60 V, 2 cores, DIV 8 | 50 | 50 | 0.0002% | 2622.081163 |
-| Official Pico 2 | 520 MHz, 1.60 V, 2 cores, DIV 10 | 10 | 10 | 0.0626% | 2611.462518 |
+| Official Pico 2 | 520 MHz, 1.60 V, 2 cores, DIV 8 (repeat) | 10 | 10 | 0.0003% | 2622.486184 |
+| Official Pico 2 | 520 MHz, 1.60 V, 2 cores, DIV 10 | 10 | 10 | 0.0271% | 2611.277278 |
 | Official Pico 2 | 546 MHz, 1.60 V, 2 cores | 2 (single points) | **1** -- the other hung joining core 1 | -- |
 | Official Pico 2 | 564 MHz, 1.60 V, 2 cores | 30 attempted | **0** -- it never ran: hard fault before its first line of output | -- |
 | Luckfox Pico 2 | 520 MHz, 1.60 V, 2 cores | 36 | 36 | 0.39% | 2612.7 |
@@ -133,7 +134,7 @@ as jitter long before it shows up as failure.
 
 | Board | Highest validated clock | First clock that failed | Flash ceiling |
 |---|---|---|---|
-| Official Pico 2 | 564 MHz single core; **520 MHz with two** | 570 MHz (`isr_hardfault`, flash verified).  With two cores: 546 is marginal (one pass, one hang in `core_stop_parallel`) and 564 hard-faults | between 86.7 and 130 MHz (DIV 6 good, DIV 4 locks up) |
+| Official Pico 2 | 564 MHz single core; **520 MHz with two** | 570 MHz (`isr_hardfault`, flash verified).  With two cores: 546 is marginal (one pass, one hang in `core_stop_parallel`) and 564 hard-faults | **between 104 and 130 MHz**: DIV 5 (104 MHz) validates, DIV 4 (130 MHz) locks the chip up.  Odd dividers are fine here -- DIV 5 and DIV 7 were both measured -- which is the RP2350's boot stage 2 behaving as its source says |
 | Luckfox Pico 2 | 564 MHz | 570 MHz (does not bring up USB) | between 57 and 78.75 MHz |
 | Official Pico W | **440 MHz** (see below) | 460 MHz untested | ≥110 MHz (DIV 4 at 440 MHz, soaked); DIV 2 = 210 MHz hangs, past the QSPI interface's 133 MHz |
 | AirMech RP2040 | 420 MHz | 440 MHz (locks up) | 105 MHz (DIV 4) |
@@ -176,12 +177,15 @@ Two gaps are visible in that table, and both are on purpose:
 * **Anything marked derived** (the 1.490x ratio, the equivalent-frequency table) is
   arithmetic on measured numbers and inherits their error, which is small: the
   linearity deviations above are 0.001%.
-* **The flash divider is not a free variable.**  At 520 MHz on the official Pico 2,
-  DIV 8 (65 MHz of flash clock) gave 2622.08 iterations/sec with a 0.0002% spread
-  over 50 runs, and DIV 10 (52 MHz) gave 2611.46 with 0.0626% over 10 -- 0.4% slower
-  and 300 times less steady, because the misses the cache does take cost more.  It
-  is not a memory wall (the score is still linear in the clock), but a row without
-  its divider is not a row someone can reproduce.
+* **The flash divider matters with two cores and not with one.**  At 520 MHz on the
+  official Pico 2, two cores measured 2622.486184 iterations/sec over ten runs at DIV
+  8 (65 MHz of flash clock) and 2611.277278 over ten at DIV 10 (52 MHz): 0.43% slower,
+  with a spread of 0.0271% against 0.0003%, ninety times less steady -- and both
+  measured through the same flow in the same session, so it is not a session effect.
+  One core at the same clock read 1465.38, 1465.39 and 1465.40 at DIV 10, 7 and 5, so
+  104 MHz of flash clock with one core buys nothing at all.  That is contention rather
+  than bandwidth, and it is why a row without its divider is not a row someone can
+  reproduce.
 * **Every row should name its flash clock**, and the rows above mostly do.  The
   Luckfox board's 540 MHz row does not, because that measurement predates this table
   and its notes do not record the divider; re-measuring it is one point.
