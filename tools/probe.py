@@ -61,18 +61,40 @@ PLATFORM = {
                "ladder": [300000, 400000, 500000, 520000, 546000, 564000, 570000, 600000]},
 }
 
-# sel -> macro name.  The platforms number their regulator steps differently (the
-# RP2040's 1.10 V is sel 11, the RP2350's 1.60 V is sel 19); a generated board file
-# must not guess which one it is looking at.
-VREG_NAME = {
-    "rp2040": {5: "VREG_VOLTAGE_0_80", 6: "VREG_VOLTAGE_0_85", 7: "VREG_VOLTAGE_0_90",
-               8: "VREG_VOLTAGE_0_95", 9: "VREG_VOLTAGE_1_00", 10: "VREG_VOLTAGE_1_05",
-               11: "VREG_VOLTAGE_1_10", 12: "VREG_VOLTAGE_1_15", 13: "VREG_VOLTAGE_1_20",
-               14: "VREG_VOLTAGE_1_25", 15: "VREG_VOLTAGE_1_30"},
-    "rp2350": {0: "VREG_VOLTAGE_0_55", 11: "VREG_VOLTAGE_1_10", 13: "VREG_VOLTAGE_1_20",
-               15: "VREG_VOLTAGE_1_30", 17: "VREG_VOLTAGE_1_40", 19: "VREG_VOLTAGE_1_50",
-               20: "VREG_VOLTAGE_1_60", 21: "VREG_VOLTAGE_1_65"},
-}
+def vreg_table(sdk):
+    """sel -> macro name, read out of the SDK instead of typed in here.
+
+    A generated board file names the voltage it wants as a macro, so a wrong entry
+    in this table produces a file that asks for the wrong voltage -- and the two
+    platforms do not share a shape: the RP2350's ladder has gaps (1.45 and 1.55 do
+    not exist, so 1.60 V is sel 19) and it goes higher than the RP2040's.  The
+    header is right there in the SDK; parsing it removes the whole class of
+    hand-typed error.  The fallback below is the same table, typed correctly.
+
+    (Measured: a first version of this file had 1.60 V as sel 20, which would have
+    written VREG_VOLTAGE_1_50 into a board file for a 564 MHz configuration.)"""
+    path = os.path.join(sdk, "src/rp2_common/hardware_vreg/include/hardware/vreg.h")
+    table = {}
+    try:
+        with open(path) as fh:
+            for name, bits in re.findall(r"(VREG_VOLTAGE_[0-9_]+)\s*=\s*0b([01]+)", fh.read()):
+                table[int(bits, 2)] = name
+    except OSError:
+        return {}
+    return table
+
+
+# Fallback, if the SDK header cannot be read: the same numbering, which both
+# platforms share up to 1.30 V, with the RP2350's extra steps above it.
+VREG_NAME_FALLBACK = {5: "VREG_VOLTAGE_0_80", 6: "VREG_VOLTAGE_0_85",
+                      7: "VREG_VOLTAGE_0_90", 8: "VREG_VOLTAGE_0_95",
+                      9: "VREG_VOLTAGE_1_00", 10: "VREG_VOLTAGE_1_05",
+                      11: "VREG_VOLTAGE_1_10", 12: "VREG_VOLTAGE_1_15",
+                      13: "VREG_VOLTAGE_1_20", 14: "VREG_VOLTAGE_1_25",
+                      15: "VREG_VOLTAGE_1_30", 16: "VREG_VOLTAGE_1_35",
+                      17: "VREG_VOLTAGE_1_40", 18: "VREG_VOLTAGE_1_50",
+                      19: "VREG_VOLTAGE_1_60", 20: "VREG_VOLTAGE_1_65",
+                      21: "VREG_VOLTAGE_1_70"}
 
 
 def log(msg=""):
@@ -392,6 +414,9 @@ class Probe:
         self.stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         self.env = dict(os.environ)
         self.env["PICO_SDK_PATH"] = args.sdk
+        # Voltage names straight out of the SDK; see vreg_table() for why this is
+        # not a table typed into this file.
+        self.vreg = vreg_table(args.sdk) or VREG_NAME_FALLBACK
 
     # ---- bookkeeping (a probe that can be interrupted is a probe you can use) --
     def key(self, khz, div, mt, rep):
@@ -758,7 +783,7 @@ def report(p, args, ident, ladder, bad, flashes, dual, soak_rec, pll_skipped, un
         A("|---|---|---|---|---|---|")
         for rec in ladder:
             s = rec["scores"][0] if rec.get("scores") else 0.0
-            v = VREG_NAME.get(p.family, {}).get(rec.get("vreg_sel"), "sel %s" % rec.get("vreg_sel"))
+            v = p.vreg.get(rec.get("vreg_sel"), "sel %s" % rec.get("vreg_sel"))
             A("| %d kHz | %s | %s kHz | %.2f | %.3f | ok |"
               % (rec["khz"], v, rec.get("flash_khz", "?"), s, s / (rec["khz"] / 1000.0)))
         if bad:
@@ -895,7 +920,7 @@ def propose_board_file(p, args, ladder, flashes, top):
     good_flash = [r for r in flashes if r.get("result") == "ok"]
     flash_max = max((r.get("flash_khz") or 0 for r in good_flash), default=None) \
         or top.get("flash_khz")
-    volts = lambda rec: VREG_NAME.get(p.family, {}).get(rec.get("vreg_sel"), "?")
+    volts = lambda rec: p.vreg.get(rec.get("vreg_sel"), "?")
 
     def div_of(rec):
         """The divider this point actually ran at: pinned if it was pinned, else
@@ -920,7 +945,7 @@ def propose_board_file(p, args, ladder, flashes, top):
     for name, rec in zip(names, picks):
         s = rec["scores"][0] if rec.get("scores") else 0.0
         volt = volts(rec)
-        if volt != VREG_NAME[p.family].get(stock_sel):
+        if volt != p.vreg.get(stock_sel):
             volt = volt.replace("VREG_VOLTAGE_", "").replace("_", ".") + " V"
         else:
             volt = "stock voltage"
@@ -947,7 +972,7 @@ def propose_board_file(p, args, ladder, flashes, top):
         if i:
             A('elseif(PICO_TURBO_PROFILE STREQUAL "%s")' % name)
         A("    set(PICO_TURBO_SYS_CLK_KHZ %d)" % rec["khz"])
-        v = VREG_NAME.get(p.family, {}).get(rec.get("vreg_sel"))
+        v = p.vreg.get(rec.get("vreg_sel"))
         if v and rec.get("vreg_sel") != stock_sel:
             A("    set(PICO_TURBO_VREG_VOLTAGE %s)" % v)
         else:
