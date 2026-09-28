@@ -160,6 +160,32 @@ MHz, validated**.  The AirMech RP2040 board locked up at that clock, so the top 
 the RP2040 range is a property of the board and not of the chip -- unlike the two
 RP2350 boards here, which both stop at 564 passing and 570 failing.
 
+### 440 MHz at the regulator's maximum, soaked
+
+The 440 MHz point above ran at the divider the library derives once the ceiling is
+raised out of the way (DIV 6, 73.3 MHz of flash clock).  Pinning it to DIV 4
+instead -- 110 MHz of flash clock, above the 105 MHz the board file carries --
+changed the score not at all (832.21 both ways: the working set really does live in
+the XIP cache), and 30 consecutive dual-core runs at that configuration all
+validated:
+
+| Quantity | Result |
+|---|---|
+| Configuration | 440 MHz, 1.30 V (sel 15), DIV 4 = 110 MHz flash, 2 cores |
+| Runs that produced a score | 30 of 30 |
+| Runs that validated | 30 of 30 |
+| `Errors detected` | 0 |
+| Iterations/sec | mean 1484.793434, min 1484.786266, max 1484.798949 |
+| Spread | 0.0009% |
+| Dual-core ratio | 1484.79 / 832.21 = 1.784x, the same as every other tier here |
+
+So this board's answer to "how far does it go" is at least 440 MHz -- the highest
+voltage the RP2040's regulator is documented for -- and it holds there under two
+cores for as long as it was asked to.  The flash ceiling a board file carries is the
+fastest *validated* one, which is why `boards/pico_w.cmake` now says 110 MHz rather
+than 105: 105 was what the ladder had shown at 420 MHz, and this is what the soak
+showed two rows above it.
+
 Dual core at 420 MHz, one context per core, 20160 iterations: 1417.30
 iterations/sec, which is 1.784x the single-core score.  That is the same 1.78x the
 RP2350 boards show, because a second core is limited by the memory the two share
