@@ -1,0 +1,16 @@
+# Build output, wherever a build was configured from.
+build/
+build-*/
+rpi-pico/build*/
+*.elf
+*.uf2
+*.bin
+*.hex
+*.map
+*.dis
+
+# Probe output: tools/probe.py defaults to ./probe-<board>-<stamp>, which is the
+# directory the command was run from.  The whole point of that directory is that
+# it is throwaway -- but it also holds a complete cmake build tree, so it must not
+# be one `git add -A` away from being committed.
+probe-*/

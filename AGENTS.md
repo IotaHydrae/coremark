@@ -26,6 +26,11 @@
    构建里已经设了 `PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS`，让每次启动先等端口再开跑
    （等待发生在计时之前，不影响成绩）。**判定 soak 的基准是应用自己打的
    `COREMARK-REPEAT: run N of M` 计数与 `all M runs finished`，不是 reader 数到的行数。**
+5b. **跑分期间别让主机休眠** ✗：合盖/挂起会让 reader 掉设备、整轮**一个成绩都留不下**，
+   而现场看起来像"板子在这个频率上挂了"（实测就是这样误判过一次 420 MHz：日志里状态行
+   明明写着 `420000 measured, vreg sel 15, usb ok`，成绩却没有，调试器读到 PC 停在
+   `timer_time_reached`）。**状态行 + 没成绩 + PC 停在计时相关函数**，这个组合先怀疑主机，
+   再怀疑板子。同理，`sudo systemctl suspend`、切换用户会话、拔掉主机侧 USB 都能造成一样的现场。
 6. **`Errors detected` 不等于数据错**：CoreMark 把"没跑满 10 秒"也算 error。判定要看
    `[i]ERROR! ... crc` 这类逐项行和状态行。
 7. **只有已验证的结论**：每个数字要能说出板子、时钟、电压、context 数、迭代数。

@@ -29,6 +29,10 @@ and the board is put back to the last known-good image before anything else runs
 
 Requires: openocd, picotool, arm-none-eabi-gcc, the pico-sdk, pyusb, and a
 pico-turbo checkout (which the rpi-pico CoreMark port needs anyway).
+
+Do not suspend the host while this runs.  A suspended machine drops the console
+reader's device and the run leaves no score behind, which looks exactly like a
+board that hung at the frequency under test -- measured, and mistaken for one.
 """
 
 import argparse
@@ -384,6 +388,7 @@ class Probe:
         self.dbg.target = family
         self.dbg.family = family
         self.known_good = os.path.join(self.out, "known-good.elf")
+        self.command = None
         self.stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         self.env = dict(os.environ)
         self.env["PICO_SDK_PATH"] = args.sdk
@@ -396,13 +401,22 @@ class Probe:
         path = os.path.join(self.out, "results.json")
         if os.path.exists(path):
             try:
-                self.results = json.load(open(path))
+                loaded = json.load(open(path))
             except ValueError:
-                self.results = {}
+                loaded = {}
+            # Older files were a bare mapping; newer ones carry the command line
+            # that produced them, because a run whose flags are unknown cannot be
+            # reproduced -- which is exactly what a report is for.
+            if isinstance(loaded, dict) and "results" in loaded:
+                self.command = loaded.get("command")
+                self.results = loaded["results"] or {}
+            else:
+                self.results = loaded or {}
         return self.results
 
     def save(self):
-        json.dump(self.results, open(os.path.join(self.out, "results.json"), "w"),
+        json.dump({"command": " ".join(sys.argv), "results": self.results},
+                  open(os.path.join(self.out, "results.json"), "w"),
                   indent=1, sort_keys=True)
 
     # ---- build -----------------------------------------------------------
@@ -682,6 +696,10 @@ def report(p, args, ident, ladder, bad, flashes, dual, soak_rec, pll_skipped, un
     A("# Probe: %s (%s, flash %s)" % (args.board, p.family, ident.get("flash_size", "?")))
     A("")
     A("%s.  One command, and the measurements this repository's notes are made of." % p.stamp)
+    A("")
+    A("```")
+    A("$ %s" % (p.command or "tools/probe.py (command line not recorded)"))
+    A("```")
     A("")
     A("Every point below was built, written to flash, read back and compared byte for")
     A("byte, then run -- and kept only if the application validated its own result and")
