@@ -21,6 +21,28 @@ changes) is in the [pico-turbo notes](https://github.com/IotaHydrae/pico-turbo/b
 | 540 MHz | 1.60 V | 1 | 18000 | 1521.74 | 3.60x |
 | 570 MHz | 1.60 V | 1 | -- | -- | the same firmware does not bring up its USB |
 
+### What a clock here is worth on the other chip
+
+Derived from the rows in this file, and from the Pico W's ladder, using the fact
+that both platforms are linear in the clock to within 0.001%:
+
+| | Iterations/sec per MHz |
+|---|---|
+| RP2350 (Cortex-M33), one core | **2.8180** |
+| RP2040 (Cortex-M0+), one core | **1.8914** |
+
+So the M33 does **1.490x** the work per clock that the M0+ does, and a second core
+buys 1.78-1.79x on both.  The Pico W's best configuration -- 440 MHz at 1.30 V, the
+highest its regulator is documented for -- is therefore worth an RP2350 at about
+**295 MHz** (295.3 from the single-core numbers, 294.5 from the dual-core ones),
+which is a voltage step lower: the closest measured RP2350 point is 300 MHz at
+845.41 single and 1509.70 dual, about 1.7% above it.  In the other direction, the
+Pico 2's 564 MHz is work a Pico W could only match at about 840 MHz, twice what its
+regulator allows.
+
+The full version of this, with the whole ladder in one place, is
+[RANKINGS.md](../RANKINGS.md) at the top of this repository.
+
 The scores are linear in the clock from 150 to 540 MHz -- 1465.38/422.71 = 3.47x
 against a 520/150 = 3.47x clock ratio -- because the flash clock stays under
 60 MHz and the working set fits the XIP cache: there is no memory wall to find at
@@ -178,6 +200,12 @@ validated:
 | Iterations/sec | mean 1484.793434, min 1484.786266, max 1484.798949 |
 | Spread | 0.0009% |
 | Dual-core ratio | 1484.79 / 832.21 = 1.784x, the same as every other tier here |
+
+That configuration is now what `boards/pico_w.cmake` in pico-turbo defaults to, and
+the default was checked the way the numbers above were: a build given only
+`-DPICO_BOARD=pico_w` resolved to 440 MHz, 1.30 V and a 110 MHz flash clock, and the
+application came up at 440000 kHz measured with vreg sel 15 and validated 832.21
+iterations/sec.
 
 So this board's answer to "how far does it go" is at least 440 MHz -- the highest
 voltage the RP2040's regulator is documented for -- and it holds there under two
