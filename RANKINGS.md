@@ -53,7 +53,7 @@ Dual-core rows, same boards:
 | Board | Clock | Voltage | Cores | CoreMark 1.0 | vs one core |
 |---|---|---|---|---|---|
 | Official Pico 2 | 520 MHz | 1.60 V | 2 | **2622.08** | 1.789x |
-| Official Pico 2 | 546 MHz | 1.60 V | 2 | *(hangs joining core 1: PC in `core_stop_parallel`)* | -- |
+| Official Pico 2 | 546 MHz | 1.60 V | 2 | *(2748.29 once, and hung joining core 1 once: PC in `core_stop_parallel` -- marginal)* | -- |
 | Official Pico 2 | 564 MHz | 1.60 V | 2 | *(hard-faults before it prints anything)* | -- |
 | Luckfox Pico 2 | 520 MHz | 1.60 V | 2 | 2612.70 | 1.786x |
 | Official Pico W | 440 MHz | 1.30 V | 2 | **1484.79** | 1.784x |
@@ -115,7 +115,9 @@ chip:
 
 | Board | Configuration | Runs | Validated | Spread | Mean |
 |---|---|---|---|---|---|
-| Official Pico 2 | 520 MHz, 1.60 V, 2 cores | 50 | 50 | 0.0002% | 2622.081163 |
+| Official Pico 2 | 520 MHz, 1.60 V, 2 cores, DIV 8 | 50 | 50 | 0.0002% | 2622.081163 |
+| Official Pico 2 | 520 MHz, 1.60 V, 2 cores, DIV 10 | 10 | 10 | 0.0626% | 2611.462518 |
+| Official Pico 2 | 546 MHz, 1.60 V, 2 cores | 2 (single points) | **1** -- the other hung joining core 1 | -- |
 | Official Pico 2 | 564 MHz, 1.60 V, 2 cores | 30 attempted | **0** -- it never ran: hard fault before its first line of output | -- |
 | Luckfox Pico 2 | 520 MHz, 1.60 V, 2 cores | 36 | 36 | 0.39% | 2612.7 |
 | Official Pico W | 440 MHz, 1.30 V, 2 cores | 30 | 30 | 0.0009% | 1484.793434 |
@@ -131,7 +133,7 @@ as jitter long before it shows up as failure.
 
 | Board | Highest validated clock | First clock that failed | Flash ceiling |
 |---|---|---|---|
-| Official Pico 2 | 564 MHz single core; **520 MHz with two** | 570 MHz (`isr_hardfault`, flash verified); 546 MHz with two cores hangs in `core_stop_parallel`, 564 with two hard-faults | between 86.7 and 130 MHz (DIV 6 good, DIV 4 locks up) |
+| Official Pico 2 | 564 MHz single core; **520 MHz with two** | 570 MHz (`isr_hardfault`, flash verified).  With two cores: 546 is marginal (one pass, one hang in `core_stop_parallel`) and 564 hard-faults | between 86.7 and 130 MHz (DIV 6 good, DIV 4 locks up) |
 | Luckfox Pico 2 | 564 MHz | 570 MHz (does not bring up USB) | between 57 and 78.75 MHz |
 | Official Pico W | **440 MHz** (see below) | 460 MHz untested | ≥110 MHz (DIV 4 at 440 MHz, soaked); DIV 2 = 210 MHz hangs, past the QSPI interface's 133 MHz |
 | AirMech RP2040 | 420 MHz | 440 MHz (locks up) | 105 MHz (DIV 4) |
@@ -157,9 +159,11 @@ Two gaps are visible in that table, and both are on purpose:
 * `boards/pico.cmake` describes a plain Pico that has not been on this bench at all;
   its numbers are inherited expectations, and `tools/probe.py --board pico` is one
   command away from replacing them with measurements.
-* The second core costs about 40 MHz of headroom on this chip: 520 MHz was soaked
-  with two cores and 546 already fails, while one core validates to 564.  A single
-  number per board would hide that, which is why the dual-core rows above exist.
+* The second core costs headroom, and the number to quote is the *soaked* one: 520
+  MHz with two cores has 50 consecutive runs here (and 36 on the clone), while 546
+  with two cores has been seen to pass once and to hang once, and 564 with two cores
+  hard-faults.  One core validates to 564.  A single number per board would hide
+  that -- and so would a single lucky run, which is why the soak column exists.
 
 ## 7. Reading these numbers honestly
 
@@ -172,6 +176,12 @@ Two gaps are visible in that table, and both are on purpose:
 * **Anything marked derived** (the 1.490x ratio, the equivalent-frequency table) is
   arithmetic on measured numbers and inherits their error, which is small: the
   linearity deviations above are 0.001%.
+* **The flash divider is not a free variable.**  At 520 MHz on the official Pico 2,
+  DIV 8 (65 MHz of flash clock) gave 2622.08 iterations/sec with a 0.0002% spread
+  over 50 runs, and DIV 10 (52 MHz) gave 2611.46 with 0.0626% over 10 -- 0.4% slower
+  and 300 times less steady, because the misses the cache does take cost more.  It
+  is not a memory wall (the score is still linear in the clock), but a row without
+  its divider is not a row someone can reproduce.
 * **Every row should name its flash clock**, and the rows above mostly do.  The
   Luckfox board's 540 MHz row does not, because that measurement predates this table
   and its notes do not record the divider; re-measuring it is one point.

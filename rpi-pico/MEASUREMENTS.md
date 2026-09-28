@@ -70,12 +70,13 @@ validated`:
 | 564 MHz | 1589.37 | the highest that runs |
 | 570 MHz | does not run | verified: the flash matched the build exactly and the core was in `isr_hardfault` |
 
-Both cores change that edge.  At 520 MHz two contexts ran 50 consecutive times
-(above); at 546 MHz the run hangs joining core 1 -- the program counter was found in
-`core_stop_parallel`, so core 0 was waiting for a core 1 that never came back -- and
-at 564 MHz with two contexts the board hard-faults before printing its first line.
-One core validates to 564 and the dual-core configuration that was soaked is 520, so
-the second core costs this chip about 40 MHz of its ceiling.
+Both cores change that edge, and the useful number is the one that was repeated.  At
+520 MHz two contexts ran 50 consecutive times (above).  At 546 MHz two contexts have
+been seen to pass once -- 2748.29 iterations/sec -- and to hang once, with the program
+counter in `core_stop_parallel`, so core 0 was waiting for a core 1 that never came
+back.  At 564 MHz with two contexts the board hard-faults before it prints its first
+line.  One core validates to 564; the dual-core configuration with a soak behind it is
+520, and 546 is where two cores stop being reliable.
 
 Two boards from different vendors stop at the same place, so the edge is the
 chip's rather than either board's.  Scores are linear in the clock across the
@@ -267,6 +268,15 @@ rather than by the core itself.
   before it starts (the wait is before the timing, so it costs nothing).  Judge a
   soak by the counter the application prints, not by the lines the reader happened
   to catch.
+- **A debugger session's ending is part of the measurement.**  This probe has no
+  reset line, so openocd's `reset run` is a vectreset on both families: it moves the
+  program counter and runs, and resets nothing else.  On the RP2350 that
+  intermittently produced an INVSTATE fault at `platform_entry` -- the first hand-off
+  out of boot2 -- with the flash verified byte for byte and `reset run` reporting
+  success, which reads exactly like a board that cannot do 150 MHz.  What cured it,
+  and what the port now does for every point, is a real chip reset through the
+  bootrom: blank the flash so the bootrom brings up its own USB, write with picotool,
+  read the flash back over SWD and compare, then `picotool reboot`.
 - **Reading state over SWD disturbs the run** (it halts the core, and the SDK's
   watchdog pauses on debug), so the console is the channel to measure with, and
   the port prints everything it wants judged there.
