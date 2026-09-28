@@ -21,7 +21,9 @@
 
 1. **未经明确指令，不要 `git commit`，更不要 `git push`。**
 2. **时钟、电压、flash 分频都由 pico-turbo 负责**，本仓库不要再长出自己的 profile 表或分频
-   算术（原来那份在 RP2350 上会算出奇数 DIV 3，boot stage 2 直接拒绝）。
+   算术（原来那份在 RP2350 上会算出奇数 DIV 3，当时是**库自己的偶数检查**把它拒了；
+   2026-09 核对 SDK 源码后确认：偶数限制是 RP2040 的，RP2350 的 w25q080 boot2 只查上限，
+   该检查已按板子区分）。
 3. **`ITERATIONS` 必须让一次运行 ≥10 秒**（CoreMark 自己的成绩规则）：默认按频率缩放、
    双核再乘 2。**时钟要取库解析后的值**（`PICO_TURBO_RESOLVED_CLK_KHZ`），不是
    `PICO_TURBO_SYS_CLK_KHZ`：用 board 档位构建时后者是空的，会退回按 stock 频率算 ——
