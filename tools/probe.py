@@ -340,28 +340,73 @@ class Debugger:
     # watchdog's TRIGGER bit is an actual chip reset, which *does* put the SSI
     # back.  Second: a session that halted the core has to release it, or nothing
     # runs at all -- hence `reset run` after the reset, not instead of it.
-    WATCHDOG = {"rp2040": (0x4005801C, 0x40058000),   # SCRATCH4, CTRL
-                "rp2350": (0x400D801C, 0x400D8000)}
+    # How a point gets onto the board:
+    #
+    #   1. blank the flash with the debugger, which makes the chip's own bootrom
+    #      bring up its USB by itself -- no BOOTSEL button, no reset line, and it
+    #      works on both families (2e8a:0003 on an RP2040, 2e8a:000f on an RP2350);
+    #   2. write the image with picotool, whose verification is trustworthy;
+    #   3. read the flash back over SWD and compare it with the build, while the
+    #      bootrom is still up and nothing is running;
+    #   4. reboot through the bootrom, which is a real chip reset.
+    #
+    # Step 4 is the reason for all of it.  This probe has no nRESET line, so
+    # openocd's `reset run` is a vectreset: it moves the program counter and runs,
+    # and nothing else is reset.  On the RP2040 that leaves the SSI in a mode where
+    # XIP returns nibble-shifted data; on the RP2350 it intermittently drops the
+    # chip into INVSTATE at platform_entry, the very first hand-off out of boot2,
+    # with the flash verified byte for byte and `reset run` reported as fine.  Both
+    # were measured, and both are cured by the bootrom's own reset.  `resume` at
+    # the end of step 3 is equally deliberate: a halted core takes the bootrom's USB
+    # down with it, and picotool would then find nothing to reboot.
+    BOOTSEL_PID = {"rp2040": 0x0003, "rp2350": 0x000F}
+
+    def _bootsel_present(self):
+        import usb.core
+        return usb.core.find(idVendor=PICO_VID,
+                             idProduct=self.BOOTSEL_PID[self.family]) is not None
 
     def flash_and_run(self, elf, timeout=300, tag="flash"):
-        """Erase, write, verify, read the flash back, then reset the chip into the
-        image -- all in one session, because resuming a core whose flash was just
-        erased sets it running through a hole."""
+        """Put the image on the board and start it, verifying it on the way."""
+        import usb.core
         rb = os.path.join(os.path.dirname(elf), "readback.bin")
+        uf2 = os.path.splitext(elf)[0] + ".uf2"
         log_path = os.path.join(self.logs_dir, tag + ".log")
-        scratch4, ctrl = self.WATCHDOG[self.family]
-        cmds = ["init", "halt",
-                "flash erase_sector 0 0 last",
-                "flash write_image %s" % elf,
-                "verify_image %s" % elf,
-                "dump_image %s 0x10000000 0x10000" % rb,
-                # Clear the bootrom's reboot flag, force a chip reset, then release
-                # the core the halt above took hold of.
-                "mww 0x%08X 0" % scratch4,
-                "mww 0x%08X 0x80000000" % ctrl,
-                "reset run", "shutdown"]
-        rc, out = self.ocd(cmds, timeout=timeout, log_path=log_path)
-        return rc == 0, out, rb
+        out = []
+
+        # 1. blank the flash, so the bootrom comes up instead of the old image
+        rc, o = self.ocd(["init", "halt", "flash erase_sector 0 0 last",
+                          "reset run", "shutdown"], timeout=timeout)
+        out.append(o)
+        deadline = time.time() + 20
+        while time.time() < deadline and not self._bootsel_present():
+            time.sleep(0.5)
+        if not self._bootsel_present():
+            out.append("the bootrom's USB did not appear after blanking the flash")
+            open(log_path, "w").write("\n".join(out))
+            return False, "\n".join(out), rb
+
+        # 2. write it with picotool, and stay in the bootrom afterwards
+        rc, o = run(["picotool", "load", "-v", uf2,
+                     "--vid", "0x2e8a",
+                     "--pid", "0x%04x" % self.BOOTSEL_PID[self.family]], timeout=timeout)
+        out.append(o)
+        if rc != 0:
+            open(log_path, "w").write("\n".join(out))
+            return False, "\n".join(out), rb
+
+        # 3. read it back and compare, with the bootrom still running
+        rc, o = self.ocd(["init", "halt",
+                          "dump_image %s 0x10000000 0x10000" % rb,
+                          "resume", "shutdown"], timeout=timeout)
+        out.append(o)
+
+        # 4. a real reset, through the bootrom
+        rc, o = run(["picotool", "reboot", "--vid", "0x2e8a",
+                     "--pid", "0x%04x" % self.BOOTSEL_PID[self.family]], timeout=60)
+        out.append(o)
+        open(log_path, "w").write("\n".join(out))
+        return rc == 0, "\n".join(out), rb
 
     def readback_diff(self, elf, rb):
         ref = os.path.splitext(elf)[0] + ".bin"
@@ -599,12 +644,19 @@ class Probe:
             return
         log("    putting the last known-good image back")
         try:
-            flashed, _, rb = self.dbg.flash_and_run(self.known_good, tag="recover")
+            _, _, rb = self.dbg.flash_and_run(self.known_good, tag="recover")
             diff = self.dbg.readback_diff(self.known_good, rb)
-            if flashed and diff and diff[0] == 0:
+            # The read-back is the verification, here as everywhere else.  Judging
+            # this by openocd's exit status blanked a board whose image had been
+            # written and verified perfectly well -- the reset steps at the end of
+            # the session return an error on a session that did its job, and the
+            # recovery then erased a good flash in response to a success.
+            if diff and diff[0] == 0:
+                log("    the board is back on the last image that passed its checks")
                 return
-            log("    the probe could not rewrite it; blanking the flash so the "
-                "bootrom's own USB comes up")
+            log("    the probe could not rewrite it (%s); blanking the flash so the "
+                "bootrom's own USB comes up"
+                % ("no read-back" if not diff else "%d bytes differ" % diff[0]))
             self.dbg.blank()
             log("    if the board is still unreachable, press BOOTSEL and re-run")
         except Exception as exc:            # a failed recovery must not take the

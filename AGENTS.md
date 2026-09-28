@@ -105,15 +105,27 @@ clk_peri、USB 是否 48 MHz）—— 判定以它为准。
    （line coding + DTR）**必须重试** ✗ —— SDK 把"没有主机"当作"输出丢掉"，一次
    `[Errno 110]` 就换来空日志（实测 30 次 soak 全丢，计数器却在正常递增）。没收到任何数据
    时要反复重申握手，判定的基准始终是应用自己打的计数。
-8. **烧写和启动放进同一个 openocd 会话**，以 `reset run` 收尾：`resume` 会让旧镜像跑进刚被
-   擦掉的区域而挂死，而 `reset run` 才是"启动新写的镜像"这个动作，两者都不留 halt 状态。
-9. **调试器会话收尾：真复位 + 释放核，缺一不可** ✗。实测对照（同一 ELF）：halt 过而不用
+8. ~~**烧写和启动放进同一个 openocd 会话**，以 `reset run` 收尾~~ —— **已被 8b 取代**：
+   `reset run` 是 vectreset，两个平台都会偶发地在启动交接处出问题（见 8b）。这条留在这里
+   是因为它记着当时的教训：`resume` 会让旧镜像跑进刚被擦掉的区域而挂死。
+8b. **烧写路径用"擦空 → bootrom → picotool"** ✓：`flash_and_run()` 现在是①调试器擦空
+   （芯片自己进 BOOTSEL，两个平台都成立：RP2040 `2e8a:0003`、RP2350 `2e8a:000f`）②
+   `picotool load -v` 写入（它的校验可信，openocd 的不可信）③在 bootrom 状态下回读比对
+   ④`picotool reboot` 通过 bootrom 做**真芯片复位**。第③步结尾必须 `resume`：核停在 halt 会把
+   bootrom 的 USB 一起带走，picotool 就找不到东西可重启。
+   理由：探针没有 nRESET 线，**两个平台**的 `reset run` 都是 vectreset（只改 PC）。RP2040 上
+   它让 SSI 停在非读模式（XIP 读出错位数据）；RP2350 上它偶发地把 boot2→crt0 的第一次交接
+   打成 **INVSTATE**（CFSR `0x01020001`，故障 PC 落在 `platform_entry`），而 flash 逐字节
+   正确、`reset run` 还报成功 —— 一度看起来像"板子在 150 MHz 挂了"。bootrom 自己的复位不会。
+9. **诊断/单点手测时的调试器会话收尾** ✗（自动化流程见 8b：它不走这条路）。实测对照（同一 ELF）：halt 过而不用
    `reset run` 收尾 ⇒ 写完什么都不跑（这是 `tools/probe.py` 第一版的失败原因）；带 `reset run`
    ⇒ 正常出分。另有一次带 `reset run` 仍不出分，PC `0xfffffffe`（double fault）、XIP 读出的
    数据整条右移一个 nibble，而写入与校验都正常 ⇒ 推断是**回读 flash（`dump_image`）把 SSI
    留在非读模式，vectreset 修不回来**；实测的救命路径是**真芯片复位**（擦空 → `2e8a:0003`
-   BOOTSEL → picotool 写入+重启 ✓）。`probe.py` 因此固定收尾为：清 `SCRATCH4` → 写看门狗
-   `CTRL` TRIGGER（RP2040 `0x40058000`、RP2350 `0x400D8000`）→ `reset run`。
+   BOOTSEL → picotool 写入+重启 ✓）。当时据此让 `probe.py` 收尾为"清 `SCRATCH4` → 写看门狗
+   `CTRL` TRIGGER → `reset run`"；**这条路后来被 8b 取代**：看门狗触发和随后的 `reset run`
+   在 RP2350 上是竞态（复位后 bootrom 正在启动，vectreset 把 PC 拽走 ⇒ 偶发 lockup），
+   而 bootrom 自己的复位没有这个问题。
 10. **过快的 flash 分频会让板子变成软件复位救不回来的砖** ✗（boot2 里的分频每次复位都会
    重演；实测 DIV 4 @520 MHz 只能按 BOOTSEL 回来）。
 11. **调试器用来定位**（PC 在 `core_list_find` = 在跑；`isr_hardfault` = 真挂；
