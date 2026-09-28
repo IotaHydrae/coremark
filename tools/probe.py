@@ -366,6 +366,20 @@ class Debugger:
         return usb.core.find(idVendor=PICO_VID,
                              idProduct=self.BOOTSEL_PID[self.family]) is not None
 
+    def _picotool(self, args, tries=4):
+        """picotool, retried.  Its first look at a bootrom that has just enumerated
+        can lose the race and report "No accessible RP-series devices in BOOTSEL mode
+        were found" while lsusb shows the device -- measured, once, and it cost a
+        point that had already erased its flash."""
+        out = []
+        for attempt in range(tries):
+            rc, o = run(["picotool"] + args, timeout=300)
+            out.append(o)
+            if rc == 0:
+                return 0, "\n".join(out)
+            time.sleep(1.0)
+        return 1, "\n".join(out)
+
     def flash_and_run(self, elf, timeout=300, tag="flash"):
         """Put the image on the board and start it, verifying it on the way."""
         import usb.core
@@ -400,15 +414,15 @@ class Debugger:
         deadline = time.time() + 20
         while time.time() < deadline and not self._bootsel_present():
             time.sleep(0.5)
+        time.sleep(0.5)          # let the kernel finish binding before picotool asks
         if not self._bootsel_present():
             out.append("the bootrom's USB did not appear after blanking the flash")
             open(log_path, "w").write("\n".join(out))
             return False, "\n".join(out), rb
 
         # 2. write it with picotool, and stay in the bootrom afterwards
-        rc, o = run(["picotool", "load", "-v", uf2,
-                     "--vid", "0x2e8a",
-                     "--pid", "0x%04x" % self.BOOTSEL_PID[self.family]], timeout=timeout)
+        rc, o = self._picotool(["load", "-v", uf2, "--vid", "0x2e8a",
+                                "--pid", "0x%04x" % self.BOOTSEL_PID[self.family]])
         out.append(o)
         if rc != 0:
             open(log_path, "w").write("\n".join(out))
@@ -421,8 +435,8 @@ class Debugger:
         out.append(o)
 
         # 4. a real reset, through the bootrom
-        rc, o = run(["picotool", "reboot", "--vid", "0x2e8a",
-                     "--pid", "0x%04x" % self.BOOTSEL_PID[self.family]], timeout=60)
+        rc, o = self._picotool(["reboot", "--vid", "0x2e8a",
+                                "--pid", "0x%04x" % self.BOOTSEL_PID[self.family]])
         out.append(o)
         open(log_path, "w").write("\n".join(out))
         return rc == 0, "\n".join(out), rb

@@ -89,12 +89,15 @@ written and read back before it was run:
 |---|---|---|
 | 4 | 130 MHz | locks the chip up; the BOOTSEL button is what brings it back |
 | 5 | 104 MHz | 1465.40 iterations/sec, validated -- an odd divider, which the RP2350's boot stage 2 takes (the RP2040's does not) |
+| 5 | 109.2 MHz | 1538.66 at 546 MHz, validated |
 | 6 | 86.7 MHz | 1465.39 iterations/sec, validated |
 | 7 | 74.3 MHz | 1465.39, validated (odd as well) |
 | 8 | 65 MHz | 1465.39, validated |
 | 10 | 52 MHz | 1465.38, validated |
 
-This board's flash ceiling is therefore between 104 and 130 MHz, and the Luckfox
+This board's flash ceiling is therefore between 109.2 and 112.8 MHz -- 546 MHz at DIV 5
+validates and 564 MHz at DIV 5 hard-faults, while 130 MHz locks the chip up -- and the
+Luckfox
 board -- same chip, different vendor -- failed at 78.75 MHz.  The flash ceiling
 belongs to the board, not the RP2350.
 

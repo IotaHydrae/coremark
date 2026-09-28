@@ -115,6 +115,11 @@ clk_peri、USB 是否 48 MHz）—— 判定以它为准。
    `picotool load -v` 写入（它的校验可信，openocd 的不可信）③在 bootrom 状态下回读比对
    ④`picotool reboot` 通过 bootrom 做**真芯片复位**。第③步结尾必须 `resume`：核停在 halt 会把
    bootrom 的 USB 一起带走，picotool 就找不到东西可重启。
+   两个都会偶发失败的步骤都做了检查+重试：**擦除**（openocd 的 flash 驱动要在 SRAM 借
+   64 KB 工作区，RP2350 上是 `0x20010000`，被刚 halt 的 app 占着时会失败，报
+   `Could not allocate stack for flash programming code` —— 不检查的话 flash 没擦、picotool
+   往旧镜像上写，最后由回读比对兜住、白费一轮）和 **picotool**（bootrom 刚枚举出来时它的
+   第一次访问可能扑空，报 `No accessible RP-series devices in BOOTSEL mode were found`）。
    理由：探针没有 nRESET 线，**两个平台**的 `reset run` 都是 vectreset（只改 PC）。RP2040 上
    它让 SSI 停在非读模式（XIP 读出错位数据）；RP2350 上它偶发地把 boot2→crt0 的第一次交接
    打成 **INVSTATE**（CFSR `0x01020001`，故障 PC 落在 `platform_entry`），而 flash 逐字节

@@ -134,7 +134,7 @@ as jitter long before it shows up as failure.
 
 | Board | Highest validated clock | First clock that failed | Flash ceiling |
 |---|---|---|---|
-| Official Pico 2 | 564 MHz single core; **520 MHz with two** | 570 MHz (`isr_hardfault`, flash verified).  With two cores: 546 is marginal (one pass, one hang in `core_stop_parallel`) and 564 hard-faults | **between 104 and 130 MHz**: DIV 5 (104 MHz) validates, DIV 4 (130 MHz) locks the chip up.  Odd dividers are fine here -- DIV 5 and DIV 7 were both measured -- which is the RP2350's boot stage 2 behaving as its source says |
+| Official Pico 2 | 564 MHz single core; **520 MHz with two** | 570 MHz (`isr_hardfault`, flash verified).  With two cores: 546 is marginal (one pass, one hang in `core_stop_parallel`) and 564 hard-faults | **between 109.2 and 112.8 MHz**: 104 and 109.2 MHz of flash clock validate, 112.8 MHz hard-faults and 130 MHz locks the chip up.  (The flash part is rated 133 MHz, so what that brackets is the part in this configuration -- QMI timing, board layout and all -- not the part on a datasheet.)  Odd dividers are fine here -- DIV 5 and DIV 7 both measured -- which is the RP2350's boot stage 2 behaving as its source says |
 | Luckfox Pico 2 | 564 MHz | 570 MHz (does not bring up USB) | between 57 and 78.75 MHz |
 | Official Pico W | **440 MHz** (see below) | 460 MHz untested | ≥110 MHz (DIV 4 at 440 MHz, soaked); DIV 2 = 210 MHz hangs, past the QSPI interface's 133 MHz |
 | AirMech RP2040 | 420 MHz | 440 MHz (locks up) | 105 MHz (DIV 4) |
