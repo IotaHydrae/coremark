@@ -4,7 +4,8 @@
 
 **实测结果**：[`RANKINGS.md`](RANKINGS.md) 是总表（天梯：每块板的最佳已验证配置、每时钟
 效率、跨平台换算、soak 记录、各自的墙）；[`TOOLCHAINS.md`](TOOLCHAINS.md) 是**编译器天梯**
-（同一块板、同一套配置，六个 GCC 版本的单核/双核分数）；[`rpi-pico/MEASUREMENTS.md`](rpi-pico/MEASUREMENTS.md)
+（同一块板、同一套配置，Arch/ARM 官方/xPack 各发行版与 clang 的单核/双核分数，含下载链接）；
+[`rpi-pico/MEASUREMENTS.md`](rpi-pico/MEASUREMENTS.md)
 是逐块板的原始表格；时钟/电压/flash 那一侧的解读在
 [pico-turbo 的 measurements](https://github.com/IotaHydrae/pico-turbo/blob/main/docs/measurements.md)。
 
@@ -70,7 +71,10 @@
    `-O2` −0.41%、`-Os` −17.9%，且两者在 150 与 520 MHz 上**损失比例完全相同** ⇒ 分数只由
    执行的指令数决定，与取指/体积无关。指定编译器用 `--toolchain <前缀>`：它会**断言**这次
    构建真的用了那个前缀（SDK 会静默回退到 PATH ✗），天梯脚本是
-   `tools/toolchain-ladder.sh`。
+   `tools/toolchain-ladder.sh`。**打包方不是变量** ✓：Debian 的 13.2.1、Arch 的 13.2.0、
+   ARM 官方的 13.3.rel1 在同一点读 1543.051 / 1543.052 / 1543.052（六位有效数字相同 ✓），
+   ARM 14.2.rel1 与 Arch 14.2.0 单核差 0.00007% ✓ ⇒ 按**版本号**就能跟别人比，但必须带上
+   版本号 ✓。
 
 ## 提交与身份
 
@@ -191,5 +195,7 @@ clk_peri、USB 是否 48 MHz）—— 判定以它为准。
 - **WeAct 的双核墙**：520 单核过、520 双核跑不满 10 次 soak ⇒ 400–520 之间哪一档双核稳，
   还没测（`--points 480000 --mt 2 --soak 10`）。这条会改 pico-turbo 里那块板的档位语义。
 - **RP2040 侧换个编译器测一个点**：能不能 1.0530 还没验证（见 `RANKINGS.md` 第 8 节）。
-- **工具链天梯还缺非 GCC 的行**：ARM 官方 release 工具链、`arm-none-eabi-clang`，以及 15.x
-  （Arch 没为这个目标发过）—— 见 `TOOLCHAINS.md` 的"Not measured yet"。
+- **工具链天梯还缺的行**：clang（ARM LLVM ET 的 19.1.5 / 17.0.1 ✓ 已接入脚本 ✓ 未跑）、
+  **GCC 15.x**（Arch 没为这个目标打包过 ✓，是唯一缺的版本带 ✓，也是"掉档发生在 15 还是 16"
+  那一行 ✓）、xPack 13.3.1/14.2.1、ARM GNU 13.2.rel1 —— 都要**代理**才能下（见
+  `TOOLCHAINS.md` 最后一节 ✓：下载链接、资产名变化、以及断点续传的坑都在那儿 ✓）。
