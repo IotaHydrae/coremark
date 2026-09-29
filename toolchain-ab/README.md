@@ -1,9 +1,9 @@
 # The same firmware, built twice, by two compilers
 
 Two binaries of one board at one clock, differing in nothing but the toolchain -- and
-the one built by the *newer* compiler is **5.03% slower**.  This directory exists so
-that the difference can be taken apart instruction by instruction without reproducing
-anything.
+the one built by the *newer* compiler is **5.30% slower** (both sides now read from the
+same board, below).  This directory exists so that the difference can be taken apart
+instruction by instruction without reproducing anything.
 
 It is the other half of [RANKINGS.md](../RANKINGS.md) section 8.  A board on this bench
 measured 5.30% above every number already written down; the toolchain turned out to be
@@ -67,11 +67,18 @@ twelve seconds, which is CoreMark's own reporting rule), and the board file
 
 | File | Where it came from |
 |---|---|
-| `gcc16.2.0-arch-520mhz.elf` | Built, flashed, read back byte for byte, run and scored: **1465.40**, `Correct operation validated`. This is the binary that produced that number. |
-| `gcc13.2.1-debian-520mhz.elf` | Built and flashed with the same arguments, and read back byte for byte (`0 differing bytes of 39808`); **its score was not read** -- the run was stopped after the flash and before the measurement finished. The same configuration, source and clock scored 1543.05 in an earlier run (which used `-DPICO_BOARD=pico2`; the board header only includes `pico2.h`, so the two should be the same code, but that has not been checked byte for byte). |
+| `gcc16.2.0-arch-520mhz.elf` | Built, flashed, read back byte for byte, run and scored: **1465.40**, `Correct operation validated`. This is the binary that produced that number. Re-measured later on the WeAct board through the same verified path: **1465.404062**, 0.0003% from the first reading. |
+| `gcc13.2.1-debian-520mhz.elf` | Built and flashed with the same arguments, and read back byte for byte (`0 differing bytes of 39808`); its score was for a long time not read, because the run was stopped after the flash and before the measurement finished. **It has since been read on the same board, the same way: 1543.051200** -- with the state line reporting 520000 kHz measured and vreg sel 19, `ITERATIONS` 17333, 11.23 s of timed region, and `0 differing bytes of 39808` on the read-back. That is 1543.05, the figure the same configuration gave earlier using `-DPICO_BOARD=pico2`, so the board-header change moves nothing. |
 
 Both `.bin` files are the exact bytes that were written to the flash and compared
 against it.  Both `.map` files are the linker's, for symbol sizes and layout.
+
+One difference between these two and a build made elsewhere has been checked and is
+worth knowing about: they were built against a different revision of the SDK, which
+shows up in the flags string above (`-ftls-model=local-exec`, and `-mcmse` before
+`-mfloat-abi` rather than after).  A build from the current SDK, without that flag,
+scores 1465.399973 at the same point -- 0.0003% from this binary.  The SDK revision is
+not part of the number; the compiler version is, and it is worth 1.052990.
 
 ## Taking it apart
 
