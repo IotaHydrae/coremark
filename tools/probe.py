@@ -542,6 +542,23 @@ class Probe:
         full = out + out2
         return (True, full) if rc == 0 else (None, full)
 
+    def compiler(self):
+        """The compiler behind a point, read from the build that made it."""
+        cache = os.path.join(self.build, "CMakeCache.txt")
+        path = None
+        try:
+            for line in open(cache):
+                if line.startswith("CMAKE_C_COMPILER:"):
+                    path = line.split("=", 1)[1].strip()
+                    break
+        except OSError:
+            pass
+        if not path:
+            return None
+        rc, out = run([path, "--version"])
+        first = out.strip().splitlines()[0] if out.strip() else path
+        return "%s (%s)" % (first, path)
+
     # ---- one point -------------------------------------------------------
     def point(self, khz, div=None, mt=1, rep=1):
         k = self.key(khz, div, mt, rep)
@@ -577,9 +594,16 @@ class Probe:
             log("    build failed: " + " | ".join(rec["detail"]))
             self.store(k, rec)
             return rec
+        # Which compiler built this, recorded per point: a CoreMark number moves
+        # 5.30% between GCC 13.2.1 and 16.2.0 on this workload, flat across the
+        # clock and the same with one core or two (RANKINGS.md section 8), so a row
+        # without its toolchain is a row nobody can reproduce or compare.
+        rec["compiler"] = self.compiler()
         m = re.search(r"^-- pico-turbo: (.*)$", out, re.M)
         if m:
             log("    %s" % m.group(1))
+            if rec["compiler"]:
+                log("    toolchain: %s" % rec["compiler"])
             if self.args.profile:
                 r = re.search(r"pico-turbo: (\d+) MHz", out)
                 if r:
@@ -844,6 +868,13 @@ def report(p, args, ident, ladder, bad, flashes, dual, soak_rec, pll_skipped, un
     A("```")
     A("$ %s" % (p.command or "tools/probe.py (command line not recorded)"))
     A("```")
+    compilers = sorted({r.get("compiler") for r in p.results.values() if r.get("compiler")})
+    if compilers:
+        A("Toolchain: %s" % "; ".join(compilers))
+        A("")
+        A("That belongs in the report: the same source built by GCC 13.2.1 and by GCC")
+        A("16.2.0 differs by 5.30% at the same clock and voltage (RANKINGS.md section 8),")
+        A("so a score means nothing without it.")
     A("")
     A("Every point below was built, written to flash, read back and compared byte for")
     A("byte, then run -- and kept only if the application validated its own result and")
