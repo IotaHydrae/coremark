@@ -612,6 +612,9 @@ class Probe:
             if head in ("usr", "bin"):
                 head = os.path.basename(os.path.dirname(self.args.toolchain.rstrip("/"))) or head
             suffix += "+%s" % re.sub(r"[^A-Za-z0-9._+-]+", "_", head)
+        if self.args.cmake_arg:
+            suffix += "~" + "_".join(re.sub(r"[^A-Za-z0-9._+-]+", "_", a.lstrip("-D"))
+                                     for a in self.args.cmake_arg)
         if self.args.profile:
             return "profile:%s/%d/%d%s" % (self.args.profile, mt, rep, suffix)
         return "%d/%s/%d/%d%s" % (khz, div or "auto", mt, rep, suffix)
@@ -648,6 +651,8 @@ class Probe:
         flags = self.cflags_release()
         if flags:
             cmd.append("-DCMAKE_C_FLAGS_RELEASE=%s" % flags)
+        for a in self.args.cmake_arg:
+            cmd.append(a if a.startswith("-D") else "-D%s" % a)
         rc, out = run(cmd, timeout=300, log_path=os.path.join(self.logs, "cmake-%s.log" % tag),
                       env=self.env)
         if rc != 0:
@@ -732,6 +737,8 @@ class Probe:
                "stamp": time.strftime("%Y-%m-%d %H:%M:%S")}
         if self.args.vreg and not self.args.profile:
             rec["vreg_asked"] = self.vreg_macro()
+        if self.args.cmake_arg:
+            rec["cmake_args"] = list(self.args.cmake_arg)
         if self.args.cflags:
             rec["cflags"] = self.args.cflags.strip()
             log("    C flags: %s (CMAKE_C_FLAGS_RELEASE)" % self.cflags_release())
@@ -1402,6 +1409,11 @@ def main():
                          "thing the ladder is checking -- this is for asking whether "
                          "a marginal point is a voltage margin, and it is recorded "
                          "in the result key so it cannot be confused with the table's")
+    ap.add_argument("--cmake-arg", action="append", default=[], metavar="NAME=VALUE",
+                    help="extra CMake definition for every configure (repeatable); "
+                         "this is how a non-default compiler is selected, e.g. "
+                         "--cmake-arg PICO_COMPILER=pico_arm_cortex_m33_clang, and it "
+                         "joins the result key because it changes the binary")
     ap.add_argument("--toolchain", default=None,
                     help="prefix holding a specific arm-none-eabi toolchain (the "
                          "directory that has bin/ in it); the SDK searches it first "
