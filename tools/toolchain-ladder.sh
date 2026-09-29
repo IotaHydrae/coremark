@@ -7,13 +7,24 @@
 # compiler six times and print a flat line -- so probe.py asserts the prefix after
 # every build (--toolchain) and refuses the point if the build used something else.
 #
-#   tools/toolchain-ladder.sh                  # every toolchain below
-#   tools/toolchain-ladder.sh 13.2.0 16.2.0    # named ones only
-#   PROXY=host:port tools/toolchain-ladder.sh  # fetch through a proxy
+#   tools/toolchain-ladder.sh                       # every compiler below
+#   tools/toolchain-ladder.sh 13.2.0 arm-14.3.rel1  # named ones only
+#   PROXY=host:port tools/toolchain-ladder.sh       # fetch through a proxy
 #
-# Results land in $OUT/<version>/ (results.json, report.md, logs), one directory
-# per toolchain: a shared build directory keeps the first compiler in its
-# CMakeCache, so every later run would be the same measurement again.
+# Four builders, because "which compiler" is not one question:
+#
+#   arch     the Arch Linux Archive's arm-none-eabi-gcc packages, unpacked with the
+#            binutils and newlib they were packaged with
+#   armgnu   ARM's own GNU toolchain releases (developer.arm.com)
+#   xpack    xPack's arm-none-eabi-gcc redistributions, which include the 15.x
+#            releases Arch never packaged for this target
+#   llvmet   ARM's LLVM embedded toolchain for Arm (clang), which the pico-sdk
+#            supports natively -- PICO_COMPILER=pico_arm_cortex_m33_clang -- and
+#            which brings its own newlib runtimes under lib/clang-runtimes
+#
+# Results land in $OUT/<name>/ (results.json, report.md, logs), one directory per
+# toolchain: a shared build directory keeps the first compiler in its CMakeCache, so
+# every later run would be the same measurement again.
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -22,20 +33,10 @@ OUT=${OUT:-/tmp/tcl}
 BOARD=${BOARD:-weact_rp2350a}
 POINTS=${POINTS:-520000}
 ARCHIVE=https://archive.archlinux.org/packages/a
+ARM_GNU=https://developer.arm.com/-/media/Files/downloads/gnu
+XPACK=https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download
+LLVMET=https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/download
 WANT=("$@")
-
-# "gcc-version binutils-version newlib-version", as the three sat in the Arch
-# archive on the same day.  The compiler is the variable here; its companions are
-# held to what was current when it was packaged, which is what any distribution
-# build would have used.
-TOOLCHAINS=(
-    "12.2.0-1  2.39-1    4.1.0-2"
-    "13.2.0-2  2.41-1    4.3.0.20230120-1"
-    "14.1.0-1  2.42-1    4.4.0.20231231-1"
-    "14.2.0-2  2.43-2    4.5.0.20241231-2"
-    "16.1.0-1  2.46.1-1  4.6.0.20260123-1"
-    "16.2.0-1  2.47-1    4.6.0.20260123-1"
-)
 
 curl_opts=(-sSL --retry 3)
 if [ -n "${PROXY:-}" ]; then
@@ -43,67 +44,146 @@ if [ -n "${PROXY:-}" ]; then
     export http_proxy="http://$PROXY" https_proxy="http://$PROXY"
 fi
 
-wanted() {   # version without its release suffix: everything, or the named ones
+wanted() {
     [ ${#WANT[@]} -eq 0 ] && return 0
     local w
     for w in "${WANT[@]}"; do [ "$w" = "$1" ] && return 0; done
     return 1
 }
 
-fetch() {    # package name, file name
-    local dir=$1 file=$2
+fetch() {    # file name, url
+    local file=$1 url=$2
     [ -s "$TC_DIR/dl/$file" ] && return 0
     mkdir -p "$TC_DIR/dl"
     echo "  fetching $file"
-    curl "${curl_opts[@]}" -C - -o "$TC_DIR/dl/$file" "$ARCHIVE/$dir/$file" ||
-        { echo "  DOWNLOAD FAILED: $ARCHIVE/$dir/$file" >&2; return 1; }
+    curl "${curl_opts[@]}" -C - -o "$TC_DIR/dl/$file" "$url" ||
+        { echo "  DOWNLOAD FAILED: $url" >&2; return 1; }
 }
 
-for row in "${TOOLCHAINS[@]}"; do
-    # shellcheck disable=SC2086
-    set -- $row
-    gcc=$1; binutils=$2; newlib=$3
-    version=${gcc%-*}
-    wanted "$version" || continue
+# An archive that is a valid header over a truncated stream is what an interrupted
+# download leaves behind, and it fails much later as a compiler that will not run.
+unpack() {   # file name, destination
+    local file=$1 dest=$2
+    if ! tar -tf "$TC_DIR/dl/$file" >/dev/null 2>&1 &&
+       ! tar --zstd -tf "$TC_DIR/dl/$file" >/dev/null 2>&1; then
+        echo "  $file is not a complete archive; fetching it again" >&2
+        rm -f "$TC_DIR/dl/$file"
+        return 1
+    fi
+    mkdir -p "$dest"
+    if ! tar -xf "$TC_DIR/dl/$file" -C "$dest" 2>/dev/null; then
+        tar --zstd -xf "$TC_DIR/dl/$file" -C "$dest" || return 1
+    fi
+    rm -f "$TC_DIR/dl/$file"
+}
 
-    prefix=$TC_DIR/$version
-    if [ ! -x "$prefix/usr/bin/arm-none-eabi-gcc" ]; then
-        echo "== unpacking $version (binutils $binutils, newlib $newlib, as packaged with it)"
-        mkdir -p "$prefix"
-        for spec in \
+# Sets PREFIX (the directory holding bin/) and EXTRA (probe arguments) for one entry.
+ensure_prefix() {   # name, kind, spec
+    local name=$1 kind=$2 spec=$3
+    PREFIX=""; EXTRA=()
+    case $kind in
+    arch)
+        # spec: "gcc-version binutils-version newlib-version", as packaged together
+        # shellcheck disable=SC2086
+        set -- $spec
+        local gcc=$1 binutils=$2 newlib=$3
+        PREFIX=$TC_DIR/$name/usr
+        [ -x "$PREFIX/bin/arm-none-eabi-gcc" ] && return 0
+        local spec2 file
+        for spec2 in \
             "arm-none-eabi-gcc:arm-none-eabi-gcc-$gcc-x86_64" \
             "arm-none-eabi-binutils:arm-none-eabi-binutils-$binutils-x86_64" \
             "arm-none-eabi-newlib:arm-none-eabi-newlib-$newlib-any"
         do
-            file=${spec#*:}.pkg.tar.zst
-            fetch "${spec%%:*}" "$file" || exit 1
-            # An archived package that is a valid zstd header but a truncated
-            # stream is what a resumed download can leave behind, and it fails
-            # later as a compiler that will not run.  Test the archive first.
-            if ! tar --zstd -tf "$TC_DIR/dl/$file" >/dev/null 2>&1; then
-                echo "  $file is not a complete archive; fetching it again" >&2
-                rm -f "$TC_DIR/dl/$file"
-                fetch "${spec%%:*}" "$file" || exit 1
-                tar --zstd -tf "$TC_DIR/dl/$file" >/dev/null || { echo "  still broken" >&2; exit 1; }
+            file=${spec2#*:}.pkg.tar.zst
+            fetch "$file" "$ARCHIVE/${spec2%%:*}/$file" || return 1
+            if ! unpack "$file" "$TC_DIR/$name"; then
+                fetch "$file" "$ARCHIVE/${spec2%%:*}/$file" || return 1
+                unpack "$file" "$TC_DIR/$name" || return 1
             fi
-            tar --zstd -xf "$TC_DIR/dl/${spec#*:}.pkg.tar.zst" -C "$prefix" || exit 1
-            rm -f "$TC_DIR/dl/${spec#*:}.pkg.tar.zst"
         done
+        ;;
+    armgnu)
+        PREFIX=$TC_DIR/$name/arm-gnu-toolchain-$spec-x86_64-arm-none-eabi
+        [ -x "$PREFIX/bin/arm-none-eabi-gcc" ] && return 0
+        local file=arm-gnu-toolchain-$spec-x86_64-arm-none-eabi.tar.xz
+        fetch "$file" "$ARM_GNU/$spec/binrel/$file" || return 1
+        unpack "$file" "$TC_DIR/$name" || return 1
+        ;;
+    xpack)
+        PREFIX=$TC_DIR/$name/xpack-arm-none-eabi-gcc-$spec
+        [ -x "$PREFIX/bin/arm-none-eabi-gcc" ] && return 0
+        local file=xpack-arm-none-eabi-gcc-$spec-linux-x64.tar.gz
+        fetch "$file" "$XPACK/v$spec/$file" || return 1
+        unpack "$file" "$TC_DIR/$name" || return 1
+        ;;
+    llvmet)
+        # The asset name's spelling changed between releases, so find the prefix by
+        # looking for bin/clang instead of writing the directory name out.
+        PREFIX=$(find "$TC_DIR/$name" -maxdepth 2 -type d -name bin -printf '%h\n' 2>/dev/null | head -1)
+        if [ -n "$PREFIX" ] && [ -x "$PREFIX/bin/clang" ]; then
+            EXTRA=(--cmake-arg PICO_COMPILER=pico_arm_cortex_m33_clang)
+            return 0
+        fi
+        local file
+        if [ "$spec" = "19.1.5" ]; then
+            file=LLVM-ET-Arm-$spec-Linux-x86_64.tar.xz
+        else
+            file=LLVMEmbeddedToolchainForArm-$spec-Linux-x86_64.tar.xz
+        fi
+        fetch "$file" "$LLVMET/release-$spec/$file" || return 1
+        unpack "$file" "$TC_DIR/$name" || return 1
+        PREFIX=$(find "$TC_DIR/$name" -maxdepth 2 -type d -name bin -printf '%h\n' | head -1)
+        EXTRA=(--cmake-arg PICO_COMPILER=pico_arm_cortex_m33_clang)
+        ;;
+    *) echo "unknown builder kind $kind" >&2; return 1 ;;
+    esac
+    [ -x "$PREFIX/bin/arm-none-eabi-gcc" ] || [ -x "$PREFIX/bin/clang" ]
+}
+
+BUILDERS=(
+    "12.2.0|arch|12.2.0-1 2.39-1 4.1.0-2"
+    "13.2.0|arch|13.2.0-2 2.41-1 4.3.0.20230120-1"
+    "14.1.0|arch|14.1.0-1 2.42-1 4.4.0.20231231-1"
+    "14.2.0|arch|14.2.0-2 2.43-2 4.5.0.20241231-2"
+    "16.1.0|arch|16.1.0-1 2.46.1-1 4.6.0.20260123-1"
+    "arm-13.2.rel1|armgnu|13.2.rel1"
+    "arm-13.3.rel1|armgnu|13.3.rel1"
+    "arm-14.2.rel1|armgnu|14.2.rel1"
+    "arm-14.3.rel1|armgnu|14.3.rel1"
+    "xpack-13.3.1|xpack|13.3.1-1.1"
+    "xpack-14.2.1|xpack|14.2.1-1.1"
+    "xpack-15.2.1|xpack|15.2.1-1.1"
+    "llvm-19.1.5|llvmet|19.1.5"
+    "llvm-17.0.1|llvmet|17.0.1"
+)
+
+for row in "${BUILDERS[@]}"; do
+    name=${row%%|*}; rest=${row#*|}; kind=${rest%%|*}; spec=${rest#*|}
+    wanted "$name" || continue
+    echo "== $name ($kind)"
+    if ! ensure_prefix "$name" "$kind" "$spec"; then
+        echo "  could not prepare $name" >&2
+        continue
     fi
-    echo "  $version: $("$prefix/usr/bin/arm-none-eabi-gcc" --version | head -1)"
+    if [ -x "$PREFIX/bin/clang" ]; then
+        echo "  $PREFIX/bin/clang: $("$PREFIX/bin/clang" --version | head -1)"
+    else
+        echo "  $PREFIX/bin/arm-none-eabi-gcc: $("$PREFIX/bin/arm-none-eabi-gcc" --version | head -1)"
+    fi
 done
 
-for row in "${TOOLCHAINS[@]}"; do
-    # shellcheck disable=SC2086
-    set -- $row
-    version=${1%-*}
-    wanted "$version" || continue
-    out=$OUT/$version
+for row in "${BUILDERS[@]}"; do
+    name=${row%%|*}; rest=${row#*|}; kind=${rest%%|*}; spec=${rest#*|}
+    wanted "$name" || continue
+    ensure_prefix "$name" "$kind" "$spec" || continue
+    out=$OUT/$name
     rm -rf "$out"
     echo
-    echo "########## $version, one core and two, at $POINTS kHz"
+    echo "########## $name, one core and two, at $POINTS kHz"
     "$HERE/probe.py" --board "$BOARD" --points "$POINTS" --soak 0 \
-        --toolchain "$TC_DIR/$version/usr" --out "$out" || echo "  probe exited $?"
+        --toolchain "$PREFIX" "${EXTRA[@]+"${EXTRA[@]}"}" --out "$out" ||
+        echo "  probe exited $?"
 done
 
 echo
@@ -124,9 +204,9 @@ for name in sorted(os.listdir(sys.argv[1])) if os.path.isdir(sys.argv[1]) else [
         row["compiler"] = rec.get("compiler", row.get("compiler"))
     rows.append(row)
 cols = sorted({c for r in rows for c in r if c not in ("toolchain", "compiler")})
-print("%-12s %-50s %s" % ("toolchain", "compiler", "  ".join("%-14s" % c for c in cols)))
-for r in sorted(rows, key=lambda r: [int(x) for x in r["toolchain"].split(".")]):
-    print("%-12s %-50s %s" % (r["toolchain"], (r.get("compiler") or "?")[:50],
+print("%-16s %-50s %s" % ("toolchain", "compiler", "  ".join("%-14s" % c for c in cols)))
+for r in sorted(rows, key=lambda r: r["toolchain"]):
+    print("%-16s %-50s %s" % (r["toolchain"], (r.get("compiler") or "?")[:50],
                               "  ".join("%-14s" % (("%.3f" % r[c]) if c in r else "-")
                                         for c in cols)))
 PY
