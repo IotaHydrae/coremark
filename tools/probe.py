@@ -605,9 +605,13 @@ class Probe:
             suffix += "@%s" % self.vreg_macro().replace("VREG_VOLTAGE_", "").replace("_", ".")
         if self.args.toolchain:
             # A ladder of compilers is a ladder of different binaries: the same point
-            # under two toolchains must not be one row in results.json.
-            suffix += "+%s" % re.sub(r"[^A-Za-z0-9._+-]+", "_",
-                                     os.path.basename(self.args.toolchain.rstrip("/")) or "tc")
+            # under two toolchains must not be one row in results.json.  The prefix
+            # usually ends in /usr or /bin, so name it by its own directory in that
+            # case -- otherwise every toolchain in a ladder shares one key.
+            head = os.path.basename(self.args.toolchain.rstrip("/")) or "tc"
+            if head in ("usr", "bin"):
+                head = os.path.basename(os.path.dirname(self.args.toolchain.rstrip("/"))) or head
+            suffix += "+%s" % re.sub(r"[^A-Za-z0-9._+-]+", "_", head)
         if self.args.profile:
             return "profile:%s/%d/%d%s" % (self.args.profile, mt, rep, suffix)
         return "%d/%s/%d/%d%s" % (khz, div or "auto", mt, rep, suffix)
