@@ -284,9 +284,14 @@ Three gaps are visible in that table, and all three are on purpose:
 
 ## 8. The compiler is part of the number
 
-The six-release ladder behind this section -- 12.2.0 through 16.2.0, same board, same
-configuration, one compiler at a time -- is [TOOLCHAINS.md](TOOLCHAINS.md), and it is
-where the numbers below come from rather than being a footnote to them.
+The ladder behind this section -- GCC 12.2.0 through 16.2.0 from the Arch archive, plus
+ARM's own toolchain releases and a recipe for clang, same board, same configuration, one
+compiler at a time -- is [TOOLCHAINS.md](TOOLCHAINS.md), and it is where the numbers below
+come from rather than being a footnote to them.  The short version of it for this section:
+13.2.0 is the fastest release measured, 16.1.0 and 16.2.0 are the same compiler for this
+purpose, and three independent builds of the 13.x generation (Debian's, Arch's and ARM's
+own) agree to six significant figures, so the *version* is the variable and the packager
+is not.
 
 A board on this bench measured 5.30% more per clock than every number already written
 down -- flat from 150 to 520 MHz, on a board that was new here.  An offset that large,
