@@ -284,6 +284,14 @@ def reader_main(log_path, idle_s, markers):
 # cooperation from the application.
 # --------------------------------------------------------------------------
 
+WATCHDOG = {"rp2040": 0x40058000, "rp2350": 0x400D8000}
+
+#: What rpi-pico/core_portme.c writes into watchdog scratch slot 6 before it trusts
+#: slot 7 as a run counter.  Reading the count without the magic is how a probe ends
+#: up reporting a confident zero from a slot the SDK owns.
+REPEAT_MAGIC = 0x636D726B
+
+
 class Debugger:
     def __init__(self, args, logs_dir=None):
         self.interface = args.interface
@@ -463,6 +471,48 @@ class Debugger:
                 sym = s.strip().splitlines()[0]
         return addr, sym
 
+    def chip_state(self, elf=None):
+        """What the chip itself says about a run that never reported.
+
+        Read *before* any recovery, because the recovery flashes another image
+        whose own run clears the counter.  Two failures look identical from the
+        console and are not the same thing, and the program counter is what tells
+        them apart -- measured, a dual-core soak that stopped after seven runs left
+        the core spinning in `core_stop_parallel`, which is core 0 waiting on core 1
+        with no timeout, and no fault flag at all.
+
+        The counter is the port's: slots 6 and 7 of the watchdog scratch, magic
+        first (`CORE_REPEAT_MAGIC_IDX`, see rpi-pico/core_portme.c).  Slot 4 belongs
+        to the SDK.  Reading 4 instead -- which is what this function did first --
+        returns a hard zero and a confident verdict about a register nobody wrote.
+        Scratch starts at +0x0C on both families.
+        """
+        base = WATCHDOG.get(self.family)
+        if base is None:
+            return {}
+        cmds = ["init", "halt",
+                "echo {SCRATCH:}; mdw 0x%x 2" % (base + 0x24),
+                "echo {PC:}; reg pc",
+                "echo {CFSR:}; mdw 0xe000ed28 1",
+                "resume", "shutdown"]
+        rc, out = self.ocd(cmds, timeout=90)
+        st = {}
+        m = re.search(r"SCRATCH:\s*\n0x[0-9a-f]+:\s*([0-9a-f]+) ([0-9a-f]+)", out)
+        if m:
+            st["repeat_magic"] = int(m.group(1), 16)
+            st["repeat_count"] = int(m.group(2), 16)
+        m = re.search(r"pc \(/32\): (0x[0-9a-fA-F]+)", out)
+        if m:
+            st["pc"] = m.group(1)
+            if elf and have("arm-none-eabi-addr2line"):
+                _, s = run(["arm-none-eabi-addr2line", "-f", "-C", "-e", elf, st["pc"]])
+                if s.strip():
+                    st["symbol"] = s.strip().splitlines()[0]
+        m = re.search(r"CFSR:\s*\n0x[0-9a-f]+:\s*([0-9a-f]+)", out)
+        if m:
+            st["cfsr"] = m.group(1)
+        return st
+
     def blank(self):
         """A blank chip brings up the bootrom's own USB by itself, which is the
         way back to a board stuck in an application when the probe has no reset
@@ -488,19 +538,79 @@ class Probe:
         self.dbg.target = family
         self.dbg.family = family
         self.known_good = os.path.join(self.out, "known-good.elf")
-        self.command = None
+        # The report prints this, and now that the flag set is one of the measured
+        # variables it is part of the evidence rather than decoration -- so it is
+        # the invocation that is running, set here, not only the one recovered
+        # from a resumed results.json.
+        self.command = " ".join(sys.argv)
         self.stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         self.env = dict(os.environ)
         self.env["PICO_SDK_PATH"] = args.sdk
+        if args.toolchain:
+            # The SDK's own knob: it searches this prefix before PATH, and falls back
+            # to PATH with only a warning when the prefix is wrong -- which measures
+            # one compiler twice and reports no difference.  `compiler()` is checked
+            # against it after every build instead.
+            self.env["PICO_TOOLCHAIN_PATH"] = args.toolchain
         # Voltage names straight out of the SDK; see vreg_table() for why this is
         # not a table typed into this file.
         self.vreg = vreg_table(args.sdk) or VREG_NAME_FALLBACK
 
     # ---- bookkeeping (a probe that can be interrupted is a probe you can use) --
+    def cflags_tag(self):
+        """The flag set, as a filename-safe tag (empty for the default set)."""
+        cf = (self.args.cflags or "").strip()
+        if not cf:
+            return ""
+        return re.sub(r"[^A-Za-z0-9._+-]+", "_", cf).strip("_")
+
+    def cflags_release(self):
+        """`CMAKE_C_FLAGS_RELEASE` for this run.
+
+        The default set is CMake's own `-g -O3 -DNDEBUG`; the SDK only owns
+        `-mcpu/-mthumb/-march/-mfloat-abi/-mcmse`, which live in `CMAKE_C_FLAGS`.
+        An `-O` in `--cflags` replaces the level (a later `-O` on the command line
+        would otherwise win), anything else is appended after it.
+        """
+        base = "-g -DNDEBUG"
+        cf = (self.args.cflags or "").strip()
+        if not cf:
+            return None
+        if not re.search(r"(?:^|\s)-O", cf):
+            cf = "-O3 " + cf
+        return "%s %s" % (base, cf)
+
+    def vreg_macro(self):
+        """`--vreg` as an SDK macro name, checked against the SDK's own table."""
+        if not self.args.vreg:
+            return None
+        v = self.args.vreg.strip()
+        name = v if v.startswith("VREG_VOLTAGE_") else "VREG_VOLTAGE_%s" % v.replace(".", "_")
+        if name not in self.vreg.values():
+            raise SystemExit("--vreg %s: the SDK has no %s (its ladder is %s)"
+                             % (v, name, ", ".join(self.vreg[k] for k in sorted(self.vreg))))
+        return name
+
+    def vreg_sel_of(self, name):
+        """The select value behind a macro name, from the SDK's own table."""
+        for sel, n in self.vreg.items():
+            if n == name:
+                return sel
+        return None
+
     def key(self, khz, div, mt, rep):
+        tag = self.cflags_tag()
+        suffix = "/%s" % tag if tag else ""
+        if self.args.vreg:
+            suffix += "@%s" % self.vreg_macro().replace("VREG_VOLTAGE_", "").replace("_", ".")
+        if self.args.toolchain:
+            # A ladder of compilers is a ladder of different binaries: the same point
+            # under two toolchains must not be one row in results.json.
+            suffix += "+%s" % re.sub(r"[^A-Za-z0-9._+-]+", "_",
+                                     os.path.basename(self.args.toolchain.rstrip("/")) or "tc")
         if self.args.profile:
-            return "profile:%s/%d/%d" % (self.args.profile, mt, rep)
-        return "%d/%s/%d/%d" % (khz, div or "auto", mt, rep)
+            return "profile:%s/%d/%d%s" % (self.args.profile, mt, rep, suffix)
+        return "%d/%s/%d/%d%s" % (khz, div or "auto", mt, rep, suffix)
 
     def load(self):
         path = os.path.join(self.out, "results.json")
@@ -511,9 +621,10 @@ class Probe:
                 loaded = {}
             # Older files were a bare mapping; newer ones carry the command line
             # that produced them, because a run whose flags are unknown cannot be
-            # reproduced -- which is exactly what a report is for.
+            # reproduced -- which is exactly what a report is for.  The command the
+            # report prints stays this invocation's: on a resume it is the one that
+            # measured the new points and the one a reader would type.
             if isinstance(loaded, dict) and "results" in loaded:
-                self.command = loaded.get("command")
                 self.results = loaded["results"] or {}
             else:
                 self.results = loaded or {}
@@ -530,6 +641,9 @@ class Probe:
         cmd = ["cmake", "-S", src, "-B", self.build,
                "-DPICO_BOARD=%s" % self.args.board,
                "-DPICO_TURBO_DIR=%s" % self.args.pico_turbo] + extra
+        flags = self.cflags_release()
+        if flags:
+            cmd.append("-DCMAKE_C_FLAGS_RELEASE=%s" % flags)
         rc, out = run(cmd, timeout=300, log_path=os.path.join(self.logs, "cmake-%s.log" % tag),
                       env=self.env)
         if rc != 0:
@@ -542,17 +656,36 @@ class Probe:
         full = out + out2
         return (True, full) if rc == 0 else (None, full)
 
-    def compiler(self):
-        """The compiler behind a point, read from the build that made it."""
+    @staticmethod
+    def reader_note(text):
+        """Why a point produced no output, when the log says so itself.
+
+        A reader left behind by an earlier run holds the CDC interface, and the
+        one this probe starts answers `Resource busy` and never attaches.  The
+        run then looks exactly like a board that said nothing -- measured, one
+        spoiled eleven-minute soak -- so name it instead of guessing.
+        """
+        if "Resource busy" in text:
+            return ("another reader held the serial port, so the application's output "
+                    "was dropped: kill it before starting a run (AGENTS.md rule 7)")
+        if "[reader] no application appeared" in text:
+            return "no application enumerated on USB at all in the time allowed"
+        return None
+
+    def compiler_path(self):
+        """The C compiler the last configure picked, straight from the build cache."""
         cache = os.path.join(self.build, "CMakeCache.txt")
-        path = None
         try:
             for line in open(cache):
                 if line.startswith("CMAKE_C_COMPILER:"):
-                    path = line.split("=", 1)[1].strip()
-                    break
+                    return line.split("=", 1)[1].strip()
         except OSError:
             pass
+        return None
+
+    def compiler(self):
+        """The compiler behind a point, read from the build that made it."""
+        path = self.compiler_path()
         if not path:
             return None
         rc, out = run([path, "--version"])
@@ -569,8 +702,12 @@ class Probe:
 
         if self.args.profile:
             log("  profile %s, %d core(s), %d run(s)" % (self.args.profile, mt, rep))
+            if self.args.vreg:
+                log("    (--vreg is ignored here: the profile owns the voltage)")
         else:
-            log("  %d kHz, DIV %s, %d core(s), %d run(s)" % (khz, div or "auto", mt, rep))
+            log("  %d kHz, DIV %s, %d core(s), %d run(s)%s"
+                % (khz, div or "auto", mt, rep,
+                   ", at %s (not the library's table)" % self.vreg_macro() if self.args.vreg else ""))
         extra = ["-DCOREMARK_MULTITHREAD=%d" % mt, "-DCOREMARK_REPEAT=%d" % rep]
         if self.args.profile:
             # The board file owns the clock, the voltage and the divider here; the
@@ -582,11 +719,18 @@ class Probe:
             extra.append("-DPICO_TURBO_SYS_CLK_KHZ=%d" % khz)
             if div:
                 extra.append("-DPICO_TURBO_FLASH_CLK_DIV=%d" % div)
+            if self.args.vreg:
+                extra.append("-DPICO_TURBO_VREG_VOLTAGE=%s" % self.vreg_macro())
             if self.args.allow_above_ceiling:
                 extra.append("-D_PLATFORM_MAX_KHZ=%d" % khz)
 
         rec = {"khz": khz, "div": div, "mt": mt, "rep": rep,
                "stamp": time.strftime("%Y-%m-%d %H:%M:%S")}
+        if self.args.vreg and not self.args.profile:
+            rec["vreg_asked"] = self.vreg_macro()
+        if self.args.cflags:
+            rec["cflags"] = self.args.cflags.strip()
+            log("    C flags: %s (CMAKE_C_FLAGS_RELEASE)" % self.cflags_release())
         ok, out = self.cmake_build(extra, k.replace("/", "-"))
         if not ok:
             rec["result"] = "build failed"
@@ -599,6 +743,19 @@ class Probe:
         # clock and the same with one core or two (RANKINGS.md section 8), so a row
         # without its toolchain is a row nobody can reproduce or compare.
         rec["compiler"] = self.compiler()
+        # --toolchain asserts itself: the SDK falls back to PATH with a warning, so a
+        # ladder of toolchains has to prove that the prefix was the one used, or it
+        # measures the same compiler six times and reports a flat line.
+        if self.args.toolchain:
+            rec["toolchain"] = self.args.toolchain
+            want = os.path.realpath(os.path.join(self.args.toolchain, "bin/arm-none-eabi-gcc"))
+            got = self.compiler_path()
+            if not got or os.path.realpath(got) != want:
+                rec["result"] = "toolchain prefix not taken"
+                rec["detail"] = "asked for %s but built with %s" % (want, got)
+                log("    %s" % rec["detail"])
+                self.store(k, rec)
+                return rec
         m = re.search(r"^-- pico-turbo: (.*)$", out, re.M)
         if m:
             log("    %s" % m.group(1))
@@ -647,6 +804,17 @@ class Probe:
             rec["vreg_sel"], rec["flash_khz"] = int(st.group(4)), int(st.group(5))
             log("    state: %d kHz measured, vreg sel %d, flash %d kHz"
                 % (rec["measured"], rec["vreg_sel"], rec["flash_khz"]))
+            # The chip's own reading of the regulator against what was asked for.
+            # The library has a ceiling of its own -- PICO_TURBO_MAX_VREG_VOLTAGE,
+            # 1.60 V on an RP2350 -- and it clamps rather than refuses, so a --vreg
+            # above it is silently not applied unless the state line is checked.
+            asked = self.vreg_macro()
+            sel_asked = self.vreg_sel_of(asked) if asked else None
+            if sel_asked is not None and rec["vreg_sel"] != sel_asked:
+                rec["vreg_clamped"] = sel_asked - rec["vreg_sel"]
+                log("    the chip is at sel %d, not the %s asked for: pico-turbo clamped it "
+                    "(its ceiling is PICO_TURBO_MAX_VREG_VOLTAGE)"
+                    % (rec["vreg_sel"], asked))
         rec["scores"] = [float(v) for v in re.findall(r"CoreMark 1\.0 : ([\d.]+)", text)]
         rec["validated"] = text.count("Correct operation validated")
         rec["errors"] = text.count("Errors detected")
@@ -670,6 +838,10 @@ class Probe:
             rec["symbol"] = sym
             rec["result"] = "hang" if addr else "no output"
             log("    NO SCORE -- program counter %s %s" % (rec["pc"], sym or ""))
+            note = self.reader_note(text)
+            if note:
+                rec["detail"] = note
+                log("    %s" % note)
         elif not all(checks.values()):
             rec["result"] = "failed: " + ", ".join(n for n, v in checks.items() if not v)
             log("    %s" % rec["result"])
@@ -679,6 +851,62 @@ class Probe:
             log("    ok: %.2f iterations/sec%s%s"
                 % (mean, ", %d validated of %d" % (rec["validated"], rep) if rep > 1 else "",
                    ", %.3f per MHz" % (mean / (khz / 1000.0)) if rep == 1 else ""))
+
+        # A soak that comes up short is not a soak that passed: repeating the run
+        # is only interesting if every run reports.  Ask the chip why -- now,
+        # before put_back() rewrites the flash with an image whose own run clears
+        # the counter.  Measured on this board: four attempts, three of which
+        # stopped somewhere in the second half, and the two failure modes are not
+        # the same finding.
+        #
+        # The application's order in portable_fini() is: the score, then the
+        # counter read from scratch, incremented, printed as `run N of M` and
+        # written back, then the reboot -- so the counter and the number of scores
+        # both count *finished* runs, and reading the counter alone cannot say
+        # whether the next run began.  The banner of the run that never reported
+        # can: it is printed before the timed region, so a missing score with a
+        # banner present is a run that started and died, and one without is a board
+        # that never came up on that boot.
+        if rep > 1 and len(rec["scores"]) < rep:
+            st = self.dbg.chip_state(elf)
+            rec["chip_state"] = st
+            done, banners = len(rec["scores"]), rec.get("banners", 0)
+            n = (st.get("repeat_count")
+                 if st.get("repeat_magic") == REPEAT_MAGIC else None)
+            if "pc" not in st:
+                rec["soak_verdict"] = "no reading from the debugger"
+            elif n is None:
+                rec["soak_verdict"] = (
+                    "no run counter in the scratch (the magic is gone) with %d runs "
+                    "reported: the application never finished a run since its last "
+                    "complete soak" % done)
+            elif n >= rep:
+                rec["soak_verdict"] = (
+                    "the counter reached %d of %d with %d runs reported: the runs "
+                    "happened and the missing output was lost on the host side"
+                    % (n, rep, done))
+            elif banners > done:
+                rec["soak_verdict"] = (
+                    "the counter is %d with %d runs reported and %d banners: run %d "
+                    "started and stopped inside itself" % (n, done, banners, done + 1))
+            else:
+                rec["soak_verdict"] = (
+                    "the counter is %d with %d runs reported and no banner for run %d: "
+                    "it never started, so the board did not come up on that boot"
+                    % (n, done, done + 1))
+            if n is not None and n != done:
+                rec["soak_verdict"] += (
+                    " (the counter and the score count should agree; they do not -- "
+                    "read both before trusting either)")
+            if st.get("pc"):
+                rec["soak_verdict"] += "; program counter %s %s" % (st["pc"], st.get("symbol") or "")
+            if st.get("cfsr") and st["cfsr"] != "00000000":
+                rec["soak_verdict"] += "; CFSR 0x%s" % st["cfsr"]
+            log("    short soak: %d of %d runs reported, %d banners"
+                % (done, rep, banners))
+            log("    %s" % rec["soak_verdict"])
+            if rec["scores"]:
+                rec["result"] = "short soak: %d of %d runs reported" % (done, rep)
         self.store(k, rec)
         if rec["result"] == "ok":
             shutil.copyfile(elf, self.known_good)
@@ -875,6 +1103,14 @@ def report(p, args, ident, ladder, bad, flashes, dual, soak_rec, pll_skipped, un
         A("That belongs in the report: the same source built by GCC 13.2.1 and by GCC")
         A("16.2.0 differs by 5.30% at the same clock and voltage (RANKINGS.md section 8),")
         A("so a score means nothing without it.")
+    flag_sets = sorted({r.get("cflags") for r in p.results.values() if r.get("cflags")})
+    if flag_sets:
+        A("")
+        A("Flag set: %s (added to `CMAKE_C_FLAGS_RELEASE` on top of the SDK's own "
+          "`-mcpu/-march`)" % "; ".join("`%s`" % f for f in flag_sets))
+        A("")
+        A("The compile flags are a measured variable here, not a constant: the numbers")
+        A("below were produced with the set named above.")
     A("")
     A("Every point below was built, written to flash, read back and compared byte for")
     A("byte, then run -- and kept only if the application validated its own result and")
@@ -1002,11 +1238,22 @@ def report(p, args, ident, ladder, bad, flashes, dual, soak_rec, pll_skipped, un
               % (mean, min(scores), max(scores)))
         A("")
         if len(scores) != soak_rec.get("rep"):
-            A("**%d of %d runs are accounted for** -- the rest produced no output, which"
+            A("**%d of %d runs are accounted for** -- the rest produced no output."
               % (len(scores), soak_rec.get("rep", 0)))
-            A("is a result about the board, not about the reader: the counter would say")
-            A("so either way.")
             A("")
+            verdict = soak_rec.get("soak_verdict")
+            if verdict:
+                A("The chip was asked, with the debugger, **before** the board was put back")
+                A("on the last image that passed -- putting it back runs an image whose own")
+                A("run clears the counter, which is how one attempt at this question came")
+                A("back with a zero and no answer:")
+                A("")
+                A("> %s" % verdict)
+                A("")
+                A("So the failing side is named by the chip rather than assumed: a run the")
+                A("console never saw can be a run that never happened, a run that died, or")
+                A("output lost on the host -- and these are three different findings.")
+                A("")
 
     A("## What this says")
     A("")
@@ -1144,7 +1391,24 @@ def main():
     ap.add_argument("--max-khz", type=int, default=None)
     ap.add_argument("--allow-above-ceiling", action="store_true",
                     help="let a clock above the board's ceiling through (needs -D_PLATFORM_MAX_KHZ support in the board file)")
+    ap.add_argument("--vreg", default=None,
+                    help="voltage for every point, as an SDK macro name "
+                         "(VREG_VOLTAGE_1_65) or a number (1.65); by default the "
+                         "voltage comes from pico-turbo's own table, which is the "
+                         "thing the ladder is checking -- this is for asking whether "
+                         "a marginal point is a voltage margin, and it is recorded "
+                         "in the result key so it cannot be confused with the table's")
+    ap.add_argument("--toolchain", default=None,
+                    help="prefix holding a specific arm-none-eabi toolchain (the "
+                         "directory that has bin/ in it); the SDK searches it first "
+                         "and silently falls back to PATH when the prefix is wrong, "
+                         "so the build's own CMAKE_C_COMPILER is checked against it"
+                         " and the prefix goes into the result key")
     ap.add_argument("--identify-only", action="store_true")
+    ap.add_argument("--cflags", default=None,
+                    help="extra C flags for the application, after the SDK's own "
+                         "(an -O here replaces the default -O3); recorded per point. "
+                         "Use --cflags=-O2 for a set that begins with a dash")
     ap.add_argument("--fresh", action="store_true", help="ignore an existing results.json")
     ap.add_argument("--reader", nargs=3, metavar=("LOG", "IDLE", "MARKERS"), help=argparse.SUPPRESS)
     args = ap.parse_args()
