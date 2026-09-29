@@ -152,6 +152,37 @@ chip:
 | Official Pico W | 440 MHz, 1.30 V, 2 cores (through the board file) | 10 | 10 | 0.0008% | 1484.788171 |
 | Official Pico W | 420 MHz, 1.30 V, 2 cores | 20 | 20 | 0.0001% | 1417.303771 |
 | WeAct RP2350A | 520 MHz, 1.60 V, 2 cores *(GCC 13.2.1 -- see section 8)* | 10 | 10 | 0.0041% | 2760.731614 |
+| WeAct RP2350A | 520 MHz, 1.60 V, 2 cores *(GCC 16.2.0)* | 10 attempted, 4 times | **6, 6, 7 and 5** -- every attempt stopped, none reported all ten | 0.0001% over the runs that reported | 2611.059110 |
+
+The four rows for one board at one configuration are the point of this section.  The
+WeAct board completed a ten-run dual-core soak at 520 MHz under GCC 13.2.1 and has not
+completed one since, and the debugger says what stopped each attempt rather than leaving
+it at "the board hung" -- which turned out to be two different things:
+
+* **attempt three, 7 of 10:** the program counter was in `core_stop_parallel` -- core 0
+  spinning in `while (!s_core1_done)` waiting for core 1 with **no timeout** -- with CFSR
+  zero, no fault, no score, and the banner of the run that never reported sitting in the
+  log above it.  Core 1 simply stopped making progress.
+* **attempt four, 5 of 10:** the counter read 5 with five scores and six banners, so run
+  six started and never came back, and the program counter was `0xeffffffe` with CFSR
+  `0x00008200` -- `PRECISERR` with `BFARVALID` set, a precise bus fault on an address that
+  is not memory.  That is a jump into nothing rather than a wait.
+
+A hang in an inter-core join and a bus fault on a wild address are both what a rail that
+is a little too weak looks like at the heaviest load, and both are the same failure the
+official Pico 2 shows at 546 MHz, one step below this board's own limit: the heaviest load
+this board can carry is a little below its highest clock, which is the difference between
+a ceiling and a configuration.
+
+Two things follow.  Ratios and ceilings were not measured under the same load as these
+soaks, so nothing above changes; but "520 MHz valid" in the library's board file now
+means single core, and the dual-core ceiling between 400 and 520 MHz is an open
+measurement rather than a number.  (`--points 480000 --mt 2 --soak 10` places it.)  And
+the failure is not buyable-back with voltage: 1.60 V is already this library's ceiling
+(`PICO_TURBO_MAX_VREG_VOLTAGE`), and an out-of-envelope request is clamped rather than
+refused -- measured at 520 MHz with 1.65 V asked for, the application came back running
+at the stock 150 MHz with the divider applied, which the probe's "clock landed where
+asked" check is what caught.
 
 The two older RP2350 boards score within 0.36% of each other and differ in spread by
 three orders of magnitude.  Same chip, same firmware: the jitter is the board's supply
@@ -296,6 +327,68 @@ too.  It is not the answer: 546 MHz hard-faults on the WeAct board at program co
 byte both times.  One board is one board, but a failure that lands in the same
 instruction under two compilers belongs to the board.
 
+### The flags are not the lever
+
+The obvious explanation for "the newer compiler produces slower code" is that the option
+set was chosen for the older one.  It was checked, on the board that was on the bench
+(WeAct RP2350A, DIV 10, one core, GCC 16.2.0 throughout), by putting each set into
+`CMAKE_C_FLAGS_RELEASE` and measuring the same point *twice* -- at the stock clock and
+at 520 MHz -- so that a cost caused by *where the code lives* would have to show up as a
+difference between the two columns instead of as a single number:
+
+| C flags (`tools/probe.py --cflags=...`) | 150 MHz | 520 MHz | per MHz at 520 | against `-O3`, at 150 / at 520 |
+|---|---|---|---|---|
+| `-O3` (CMake's `Release` default) | 422.710618 | **1465.399973** | 2.8181 | -- |
+| `-O2` | 420.978965 | 1459.397012 | 2.8065 | **-0.4097% / -0.4096%** |
+| `-Os` | 346.894936 | 1202.569765 | 2.3126 | **-17.9356% / -17.9357%** |
+
+**Each option set loses the same percentage at 150 MHz and at 520 MHz** -- to 0.0001 of
+a percentage point, in both cases, with the score itself moving 3.5x between the
+columns.  The core clock moves 3.5x between them while the flash clock barely moves
+(50 MHz against 52 MHz), so if any part of the cost were instruction fetch -- flash
+latency, an XIP cache, code footprint -- `-Os`'s 48% smaller image would have had to
+gain at 520 MHz, or at least lose less.  It loses exactly as much, at both clocks.  This
+platform's CoreMark score is the number of instructions executed per unit of work and
+nothing else, which is what the linearity in clock and the flatness across the flash
+divider have been saying all along.
+
+Three more negatives, so that nobody spends the bench time again:
+
+* `-fno-unroll-loops` and `-fno-ipa-cp-clone` change nothing whatsoever.  Built offline
+  and disassembled, each variant is identical to `-O3` except for 16 bytes of `.rodata`
+  -- the `FLAGS_STR` string that names the flag.  The unrolled CRC kernels in the
+  disassembly are complete unrolling of constant-trip loops, which neither switch
+  controls.
+* `-flto` does not link here: `dangerous relocation: unsupported relocation` at
+  `core_main.c:301` (`.text.startup`), binutils against this SDK's linker script.  Left
+  untested rather than worked around.
+* Nothing was ever tuned: the SDK's
+  `cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake` sets `-mcpu=cortex-m33
+  -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse` and nothing else, there
+  is no compiler-version test anywhere in the SDK's cmake (the only one is in pioasm, a
+  host tool), and `-O3` is CMake's own `Release` default -- the SDK does not choose an
+  optimization level at all.  GCC 13.2.1 and GCC 16.2.0 were therefore handed the same
+  flags, and the 5.30% is what the newer compiler made of them: 2.5% more `.text`, 2.1%
+  more instructions, and a CRC kernel that grew from 166 instructions to 211 with eight
+  loads and stores where there had been one.
+
+**The 13.2.1 side, measured here.**  [toolchain-ab/](toolchain-ab/README.md) had a
+13.2.1 binary whose score was never read -- the run was stopped after the flash.  It was
+read on the WeAct board, through this repository's own verified path (erase, bootrom,
+`picotool load -v`, read back, compare), and it is **1543.051200**, with the state line
+reporting 520000 kHz measured and vreg sel 19, `ITERATIONS` 17333, 11.23 s per run and
+`0 differing bytes of 39808`.  That is 1543.05, the number the same configuration gave
+earlier on a different board, so the board-header change in between moves nothing.
+
+That pair of binaries also turned out to carry one flag this machine's builds do not
+(`-ftls-model=local-exec`, and `-mcmse` before `-mfloat-abi` rather than after): they
+were built against a different revision of the SDK.  It does not matter, and checking
+is the point: this bench's own 16.2.0 build, without that flag, scores **1465.399973**
+against the committed binary's 1465.404062 -- 0.0003% apart, which is one run of
+CoreMark.  The SDK revision and that flag are not part of the number; the compiler
+version is, and it is worth exactly 1.052990: that ratio is what this board reads at 520
+MHz and what the older boards read at 150 MHz, the same to six significant figures.
+
 **Reproducing it.**  Unpack the packages anywhere -- Arch's are plain tarballs and need
 no package manager -- and point `PICO_TOOLCHAIN_PATH` at the prefix.  Then assert that
 it took, because the SDK silently falls back to the compiler on `PATH` with nothing but
@@ -304,4 +397,13 @@ a warning, and a fallback measures one compiler twice and reports no difference:
 ```bash
 PICO_TOOLCHAIN_PATH=<prefix>/usr tools/probe.py --board <board> --points 520000
 grep CMAKE_C_COMPILER probe-*/build/CMakeCache.txt
+```
+
+The flag half needs no second toolchain -- one flag set per run, in a fresh output
+directory so the point is measured again rather than read back out of `results.json`
+(use `--cflags=-O2`, with `=`, for anything that begins with a dash):
+
+```bash
+tools/probe.py --board weact_rp2350a --points 520000 --mt 1 --soak 0 \
+               --cflags=-O2 --out probe-o2
 ```
