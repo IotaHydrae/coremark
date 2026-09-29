@@ -88,12 +88,23 @@ add_subdirectory(${PICO_TURBO_DIR} ${CMAKE_BINARY_DIR}/pico_turbo)
 
 # The frequency the score is reported against: what the library was asked for,
 # or the platform's stock clock when no overclocking was configured.
-if(${PICO_BOARD} STREQUAL "pico" OR ${PICO_PLATFORM} STREQUAL "rp2040")
+#
+# This asks the *platform*, not the board's name.  It used to read
+# `${PICO_PLATFORM} STREQUAL "rp2350"`, which is never true -- the SDK converts the
+# generic name to `rp2350-arm-s` (or -riscv) before this line runs, so the RP2350
+# branch only ever matched because the board happened to be called pico2.  A board
+# with a name of its own, which is what boards/*.h here are for, fell through both
+# branches and was configured with an empty iteration count.  Silence is the wrong
+# answer for a platform this port has no numbers for, so it is a fatal error.
+string(REGEX REPLACE "-.*" "" COREMARK_PLATFORM "${PICO_PLATFORM}")
+if(COREMARK_PLATFORM STREQUAL "rp2040")
     set(PICO_BASE_SYS_CLK_KHZ 125000)
     set(COREMARK_BASE_ITRE 3000)
-elseif(${PICO_BOARD} STREQUAL "pico2" OR ${PICO_PLATFORM} STREQUAL "rp2350")
+elseif(COREMARK_PLATFORM STREQUAL "rp2350")
     set(PICO_BASE_SYS_CLK_KHZ 150000)
     set(COREMARK_BASE_ITRE 5000)
+else()
+    message(FATAL_ERROR "coremark: no stock clock known for platform '${PICO_PLATFORM}'")
 endif()
 # What the library resolved to, not what it was asked for: a board profile in
 # pico-turbo's boards/*.cmake can supply the clock, and looking only at
