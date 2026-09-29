@@ -13,7 +13,20 @@ core as with two, which is [RANKINGS.md](../RANKINGS.md) section 8.  So every *r
 here is safe -- both sides came out of one compiler -- while the absolute constants
 (2.8180 per MHz on the RP2350, 1.8914 on the RP2040) are that compiler's numbers and not
 the silicon's.  The RP2040 side has not been re-measured under the other compiler; a
-single point would settle whether it moves by the same factor.
+single point would settle whether it moves by the same factor.  (The RP2350 side has
+been: the WeAct board reads 1543.051200 under 13.2.1 against 1465.399973 under 16.2.0,
+a ratio of 1.052990 -- see `toolchain-ab/`.)
+
+**The compile options are not a knob either, and every table below is `-O3`.**  The same
+question was put to the flags on one board, one core, one divider, at two clocks: `-O2`
+costs 0.41% and `-Os` costs 17.9%, each of them **by exactly the same percentage at 150
+MHz as at 520 MHz**.  That is what makes it conclusive rather than interesting -- if any
+of the cost were instruction fetch, the 48% smaller `-Os` image would have had to do
+better at the higher clock.  It does not, so a score here is instructions executed per
+unit of work and nothing else.  `-fno-unroll-loops` and `-fno-ipa-cp-clone` generate code
+identical to `-O3`, and `-flto` does not link against this SDK's linker script.  `-O3` is
+CMake's own `Release` default; the SDK sets no optimization level.  One flag set per run
+is measurable with `tools/probe.py --cflags=...`, which records it per point.
 
 Clock and voltage work (which frequencies a search accepts, what a longer soak
 changes) is in the [pico-turbo notes](https://github.com/IotaHydrae/pico-turbo/blob/main/docs/measurements.md).
@@ -242,6 +255,44 @@ iterations/sec, which is 1.784x the single-core score.  That is the same 1.78x t
 RP2350 boards show, because a second core is limited by the memory the two share
 rather than by the core itself.
 
+## WeAct RP2350A (RP2350A rev 2, Winbond W25Q32FV/JV 4 MB, `id = 0x1640ef`)
+
+The third RP2350A board, and the one that made the compiler question (section 8 of
+[RANKINGS.md](../RANKINGS.md)) concrete: the same source and the same clock, built by
+two compilers, both read here.
+
+| Clock | Voltage | Cores | Iterations | Iterations/sec | Notes |
+|---|---|---|---|---|---|
+| 150 MHz | sel 11 | 1 | 5000 | 422.710618 | exact repeat of the stock row above |
+| 150 MHz | sel 11 | 2 | 10000 | 756.14 | 1.789x, the usual dual-core ratio |
+| 520 MHz | 1.60 V (sel 19) | 1 | 17333 | **1465.399973** | GCC 16.2.0; 1465.40 on three separate days |
+| 520 MHz | 1.60 V (sel 19) | 1 | 17333 | **1543.051200** | the committed GCC 13.2.1 binary, flashed and read back here |
+| 520 MHz | 1.60 V (sel 19) | 2 | 34666 | 2613.91 | single point; see the soak rows |
+| 546 MHz | 1.60 V | 1 | -- | -- | **hard fault**, PC `0x1000011c`, under both compilers |
+
+**The dual-core soak at 520 MHz is where this board's limit shows, and it is not the same
+limit as its clock.**  Ten-run soaks, each run rebooting through the bootrom:
+
+| Attempt | Compiler | Runs reported | Where it stopped |
+|---|---|---|---|
+| one | GCC 13.2.1 | 10 of 10, spread 0.0041%, mean 2760.73 | -- |
+| two | GCC 16.2.0 | 6 of 10 | not diagnosed at the time |
+| three | GCC 16.2.0 | 6 of 10 | not diagnosed at the time |
+| four | GCC 16.2.0 | 7 of 10 | PC in `core_stop_parallel`, CFSR 0 |
+| five | GCC 16.2.0 | 5 of 10, six banners | PC `0xeffffffe`, CFSR `0x8200` (`PRECISERR`, `BFARVALID`) |
+
+Two failures, and they are not the same shape.  `core_stop_parallel` is the port's own
+join: core 0 spins in `while (!s_core1_done)` with **no timeout** waiting for core 1, so a
+run that ends there is a run where core 1 stopped making progress -- no fault on core 0,
+no score, and the banner of the run that never reported sitting in the log above it.  The
+fifth attempt instead ended in a **precise bus fault** at an address that is not memory
+(`0xeffffffe`), which is a jump into nothing rather than a wait.  Both are what a supply
+that is a little too weak looks like under the heaviest load available, and the official
+Pico 2 shows the same join failure at 546 MHz, one step below its own ceiling; the
+ceiling in pico-turbo's `boards/weact_rp2350a.cmake` is 520 MHz because that is what the
+board validated single core, and where the *dual-core* ceiling is between 400 and 520 MHz
+has not been searched.
+
 ## Not measured yet
 
 - The Pico W above 420 MHz: 440 MHz locked the AirMech RP2040 up, and whether
@@ -252,6 +303,11 @@ rather than by the core itself.
   78.75 MHz" is known).
 - The RP2350 boards' dual-core soak above 520 MHz, where the single core still
   validates.
+- The WeAct board's dual-core ceiling (400-520 MHz) and its flash divider ladder;
+  the official Pico 2 was taken to 109 MHz of flash clock, this board has only ever
+  been run at DIV 10 (52 MHz).
+- One RP2040 point under GCC 13.2.1, which is what would say whether the 1.0530
+  multiplier is the same on the M0+.
 
 ## Method notes
 
