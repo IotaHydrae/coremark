@@ -15,7 +15,8 @@ here is safe -- both sides came out of one compiler -- while the absolute consta
 the silicon's.  The RP2040 side has not been re-measured under the other compiler; a
 single point would settle whether it moves by the same factor.  (The RP2350 side has
 been: the WeAct board reads 1543.051200 under 13.2.1 against 1465.399973 under 16.2.0,
-a ratio of 1.052990 -- see `toolchain-ab/`.)
+a ratio of 1.052990 -- see `toolchain-ab/`.  The whole six-release ladder, one compiler
+at a time on one board, is [TOOLCHAINS.md](../TOOLCHAINS.md).)
 
 **The compile options are not a knob either, and every table below is `-O3`.**  The same
 question was put to the flags on one board, one core, one divider, at two clocks: `-O2`

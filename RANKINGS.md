@@ -194,9 +194,13 @@ less than the clone's -- which is where a third supply should land.
 Its mean is the one number in this table that cannot be compared directly with the
 others: it was measured under GCC 13.2.1, and that compiler makes this workload run
 5.30% faster -- 1.0530x (section 8).  *Divided* by that factor it is 2621.7, against the official
-board's 2622.08 at the same clock -- 0.014% apart, which is a check on section 8 made
-from a measurement that was not part of it: the compiler's factor is the same with two
-cores as with one, and the same on a soak mean as on a single run.
+board's 2622.08 at the same clock -- 0.014% apart.  That agreement was read as a check on
+section 8 at the time; it is really a check that two *different* boards and two different
+soak lengths can land that close, and the compiler's dual-core factor turned out to be
+5.93% rather than 5.30% once both compilers were measured on one board
+([TOOLCHAINS.md](TOOLCHAINS.md)).  The arithmetic that mattered is unaffected -- 520 MHz
+dual core on a WeAct board is a configuration this board does not hold, whichever
+compiler built it (see the rows above).
 
 ## 5. Where each board stops
 
@@ -280,10 +284,14 @@ Three gaps are visible in that table, and all three are on purpose:
 
 ## 8. The compiler is part of the number
 
+The six-release ladder behind this section -- 12.2.0 through 16.2.0, same board, same
+configuration, one compiler at a time -- is [TOOLCHAINS.md](TOOLCHAINS.md), and it is
+where the numbers below come from rather than being a footnote to them.
+
 A board on this bench measured 5.30% more per clock than every number already written
-down -- flat from 150 to 520 MHz, the same with one core as with two, on a board that
-was new here.  An offset that large, that flat and that reproducible is not a supply
-and not a layout.  It is the code, and the thing that makes the code is the compiler.
+down -- flat from 150 to 520 MHz, on a board that was new here.  An offset that large,
+that flat and that reproducible is not a supply and not a layout.  It is the code, and
+the thing that makes the code is the compiler.
 
 The experiment is one board, one clock, one configuration and one variable.  Arch's
 [`arm-none-eabi-gcc`](https://archlinux.org/packages/extra/x86_64/arm-none-eabi-gcc/)
@@ -296,10 +304,18 @@ installed system-wide -- and `PICO_TOOLCHAIN_PATH` pointed the build at it:
 | Arch's GCC 16.2.0 | **1465.40** | **2.818** |
 
 and at the stock clock, the same way: 445.11 against **422.71**.  Both ratios are
-1.0530, so what the toolchain does to this workload is a plain multiplier -- the same
-at 150 MHz as at 520, and the same with two cores as with one: the WeAct board's
-ten-run dual-core soak of 2760.73, *divided* by 1.0530, is 2621.7, against the official
-board's 2622.08 at the same clock.
+1.0530, so what the toolchain does to this workload is a plain multiplier -- the same at
+150 MHz as at 520 MHz.
+
+**With two cores it is a *different* multiplier, and the honest correction is that this
+section first got that wrong.**  The original claim rested on comparing a 13.2.1 dual-core
+soak mean against a 16.2.0 single dual-core point *on two different boards*; with both
+compilers now measured on the same board ([TOOLCHAINS.md](TOOLCHAINS.md)) the same week,
+the newest compilers are further behind in dual core than in single core -- 5.93% against
+5.30% for 13.2.0, 5.46% against 2.69% for 14.2.0, 3.76% against 3.52% for 12.2.0.  The
+"one core is worth 1.78x two" factor is therefore itself a compiler's number, 1.7745 to
+1.8319 across six releases, and a dual-core comparison is only safe inside one compiler --
+which is how every dual-core row here was measured.
 
 Two things make it the compiler rather than something else that moved with it:
 
