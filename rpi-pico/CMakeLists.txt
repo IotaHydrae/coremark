@@ -40,6 +40,18 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+# Boards of our own, so that a board whose ceiling has been measured can be
+# *named* apart from the boards it would otherwise share a name with.  The SDK
+# looks for <PICO_BOARD>.h in PICO_BOARD_HEADER_DIRS first and appends its own
+# boards/include afterwards, so a name it has never heard of resolves here while
+# pico, pico_w and pico2 are untouched.  Set before project(), because the board
+# is resolved during it.
+set(_COREMARK_BOARDS "${CMAKE_CURRENT_LIST_DIR}/boards")
+if (DEFINED ENV{PICO_BOARD_HEADER_DIRS})
+    set(_COREMARK_BOARDS "${_COREMARK_BOARDS};$ENV{PICO_BOARD_HEADER_DIRS}")
+endif()
+set(ENV{PICO_BOARD_HEADER_DIRS} "${_COREMARK_BOARDS}")
+
 include(pico_sdk_import.cmake)
 
 project(rpi-pico-coremark C CXX ASM)
