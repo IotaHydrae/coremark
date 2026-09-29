@@ -5,6 +5,16 @@ voltage and flash divider.  Iterations scale with the clock so every run is abou
 twelve seconds, which is CoreMark's own rule for a reportable result; every row
 below reports `Correct operation validated`.
 
+**Every number in this file was built by one toolchain: `arm-none-eabi-gcc` GCC 16.2.0
+(Arch), which is what the `Compiler version` line of all 140 runs behind these tables
+says.**  That matters more than it looks: the same source built by Debian's GCC 13.2.1
+scores 5.30% higher on this workload, flat across the clock range and the same with one
+core as with two, which is [RANKINGS.md](../RANKINGS.md) section 8.  So every *ratio*
+here is safe -- both sides came out of one compiler -- while the absolute constants
+(2.8180 per MHz on the RP2350, 1.8914 on the RP2040) are that compiler's numbers and not
+the silicon's.  The RP2040 side has not been re-measured under the other compiler; a
+single point would settle whether it moves by the same factor.
+
 Clock and voltage work (which frequencies a search accepts, what a longer soak
 changes) is in the [pico-turbo notes](https://github.com/IotaHydrae/pico-turbo/blob/main/docs/measurements.md).
 
