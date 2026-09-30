@@ -166,6 +166,42 @@ about code size or fetch.  A compiler that is 5% slower by executing 5% more
 instructions is not going to be fixed by a flag; it is a different compiler's opinion
 about what the code should be.
 
+## Another benchmark suite, and what it does to "which compiler is best"
+
+Everything above is CoreMark, and CoreMark is one workload.  The suite built for saying
+so is [Embench](https://github.com/embench/embench-iot) -- nineteen programs, from a CRC
+to a JPEG decoder -- and it now runs on this same board with pico-turbo owning the clock
+([`examples/pico/rp2350-pico2/`](https://github.com/IotaHydrae/embench-iot/tree/master/examples/pico/rp2350-pico2),
+which imports this repository's flash path and console reader rather than copying them).
+
+Two of the nineteen are enough to change the conclusion:
+
+| 520 MHz, one core, scale 100 | GCC 13.2.1 | GCC 16.2.0 | |
+|---|---|---|---|
+| `statemate`, a state machine | 700000 us | 713423 us | **GCC 16 is 1.9% slower** |
+| `matmult-int`, integer matrix multiply | 817093 us | 592063 us | **GCC 16 is 27.5% faster** |
+
+Both verified their own results, both were written and read back and compared byte for
+byte, both report the clock they measured themselves at, and both ran at the same
+scaling -- the four things this repository asks of any row.
+
+**So "GCC 13 is the best compiler for this chip" is not something that is true.**  On the
+workload this file was built around, GCC 13 wins by 5.3%.  On another of Embench's
+nineteen, GCC 16 wins by 27.5%.  The effect belongs to the *program*, and its sign is
+not stable from one program to the next.
+
+It also does not reduce to "state machines are what GCC 16 translates badly".  That was
+the shape of the CoreMark result -- 4.4 of its 5.30 points sat in `core_state_transition`
+-- and the prediction it makes about a benchmark called `statemate` is a large penalty.
+Measured, the penalty is 1.9%: not nothing, and not the same phenomenon.  What CoreMark
+found is a property of `core_state_transition`, not of state machines.
+
+**What this does to everything above.**  Nothing about the ladder itself: the ratios
+between compilers *on one workload* are as measured, and they are still the reason a row
+has to name its compiler.  What changes is the question a reader should be asking -- "is
+the compiler I am using worse than the one I could be using, on *my* code" is a question
+that takes a benchmark of their own, and this file is a measurement of CoreMark.
+
 ## The same compiler, packaged by somebody else
 
 A score that moved between packagers would be a score nobody could reproduce from a
