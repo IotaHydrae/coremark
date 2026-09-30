@@ -188,9 +188,9 @@ are unpacked.
 
 ## The state of this file, and why
 
-The downloads above went through an HTTP proxy on the local network
-(`PROXY=192.168.50.182:7890`), which is the only route to the internet from this bench; it
-was switched off before the batch finished.  So the ladder is "everything that had already
+The downloads above went through an HTTP proxy on the local network, given to the script
+the way it takes one (`PROXY=<host>:<port>`), which is the only route to the internet from
+this bench; it was switched off before the batch finished.  So the ladder is "everything that had already
 arrived, plus everything that does not need the network": the Arch rows, the three ARM GNU
 rows and the Debian binary are measured, and the rest are prepared, linked above and listed
 as not measured.

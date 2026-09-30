@@ -18,3 +18,9 @@ probe-*/
 # Python bytecode, from importing the tool rather than running it.
 __pycache__/
 *.pyc
+
+# The virtualenv the console reader's pyusb lives in -- the one thing probe.py
+# needs that the system python does not have.  It is a local `python -m venv`
+# artifact, thousands of files of it, and nothing the repository has a reason to
+# carry: recreate it with `python3 -m venv .venv && .venv/bin/pip install pyusb`.
+.venv/
