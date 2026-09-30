@@ -16,7 +16,9 @@ also ran the 150 MHz stock point, which is the control: if a number moved becaus
 ## The ladder
 
 The first table is one packager's builds -- the Arch Linux Archive's `arm-none-eabi-gcc`
-packages, each unpacked with the binutils and newlib it was packaged with:
+packages, each unpacked with the binutils and newlib it was packaged with -- plus the one
+row from somewhere else, xPack's 15.2.1, because Arch never packaged that release for
+this target and the row is worth more than the tidiness:
 
 | GCC | 150 MHz | 520 MHz, 1 core | 520 MHz, 2 cores | per MHz (1 core) | against 16.2.0 |
 |---|---|---|---|---|---|
@@ -24,6 +26,7 @@ packages, each unpacked with the binutils and newlib it was packaged with:
 | 13.2.0 | 445.111 | **1543.052** | **2768.943** | **2.9674** | **+5.30%** |
 | 14.1.0 | 430.509 | 1492.433 | 2711.127 | 2.8701 | +1.84% |
 | 14.2.0 | 434.087 | 1504.837 | 2756.757 | 2.8939 | +2.69% |
+| 15.2.1 (xPack) | 426.364 | 1478.050 | 2636.628 | 2.8424 | +0.86% |
 | 16.1.0 | 422.729 | 1465.466 | 2600.491 | 2.8182 | +0.004% |
 | 16.2.0 | 422.711 | 1465.401 | 2613.904 | 2.8181 | -- |
 
@@ -34,12 +37,18 @@ dual rows as percentages rather than as four decimal places, and read 16.1.0 aga
 
 ## What the ladder says
 
-**It is not a slope, it is a step.**  The newest two releases produce identical code
-quality for this workload (2.8182 against 2.8181 per MHz, and their 150 MHz rows agree to
-0.004%), and everything older is faster -- but not in version order: 13.2.0 is the fastest
-of the six, 12.2.0 is faster than both 14.x releases, and 14.1.0 is the slowest of the
-pre-16 group.  Choosing a compiler for this workload is not a matter of taking the newest
-or the oldest.
+**It is a decline, not a cliff.**  15.2.1 is the row that would have said *where* the drop
+from 2.9674 to 2.8181 happens, and what it says is that there is no single drop to
+locate: at 2.8424 it sits between the 14.x releases and the 16.x pair, so from 13.2.0
+onward each release is a little worse than the one before -- 2.9674, 2.8939, 2.8701,
+2.8424, 2.8182 -- with the two 16.x releases identical to four figures, so a version bump
+inside a generation buys nothing and costs nothing.
+
+What is *not* a slope is the near end: **12.2.0 sits above both 14.x releases**, and
+13.2.0 is far above everything.  This workload had a good release and then a decade of
+gradual regression, which is worth knowing before choosing a compiler for it -- the
+answer is neither the newest nor the oldest, and the ladder is one measurement of one
+workload rather than a property of GCC.
 
 **The effect is a multiplier on the clock, not a percentage that grows with it.**  Every
 toolchain's 150 MHz deficit against 16.2.0 matches its 520 MHz deficit to three significant
@@ -184,23 +193,35 @@ inside a generation is not a variable either.  And its dual-core row, 2740.23, i
 below the 14.2 pair -- larger than the few tenths of a percent dual-core runs scatter by,
 and not something a single run can settle; if it matters, it is a soak away.
 
-## clang: the recipe is ready, the measurement is not
+## clang
 
 ARM's LLVM embedded toolchain for Arm (the "LLVM ET" tarballs) is what the pico-sdk
-supports natively, and `tools/toolchain-ladder.sh` already carries it as the `llvmet`
-builder: it unpacks the tarball, finds `bin/clang`, and configures the build with
-`--cmake-arg PICO_COMPILER=pico_arm_cortex_m33_clang`, which is the SDK's own switch.  The
-SDK then finds the newlib/picolibc runtimes the tarball carries under `lib/clang-runtimes/`,
-so no sysroot has to be assembled by hand -- a system `clang` would need one, because the
-SDK only looks in that layout, which is why the tarball is the one to use.
+supports natively, and on this board it is the slowest thing measured -- slower than every
+GCC on the ladder, including the one at the bottom of it:
 
-The rows are **not measured yet**: the downloads were still in flight when the proxy this
-bench was using went away (see the last section).  The command, once the tarballs are
-unpacked:
+| Toolchain | 150 MHz | 520 MHz, 1 core | 520 MHz, 2 cores | per MHz |
+|---|---|---|---|---|
+| clang 19.1.5 (LLVM ET) | 418.956 | 1452.371 | 2598.331 | **2.7930** |
 
-```bash
-PROXY=host:port tools/toolchain-ladder.sh llvm-19.1.5 llvm-17.0.1
-```
+0.9% below GCC 16.2.0 and 5.9% below GCC 13.2.0.  One compiler, one workload, one board:
+this says nothing about clang in general, and everything about how much of a CoreMark
+number is the compiler.
+
+The recipe is `tools/toolchain-ladder.sh llvm-19.1.5`: it unpacks the tarball, finds
+`bin/clang`, and configures the build with `--cmake-arg PICO_COMPILER=pico_arm_cortex_m33_clang`,
+which is the SDK's own switch.  The SDK then finds the newlib/picolibc runtimes the
+tarball carries under `lib/clang-runtimes/`, so no sysroot has to be assembled by hand --
+a system `clang` would need one, because the SDK only looks in that layout, which is why
+the tarball is the one to use.
+
+**The toolchain assertion had to be widened for it, and that is worth knowing about.**
+`probe.py --toolchain` required the build to have used exactly
+`<prefix>/bin/arm-none-eabi-gcc`.  An LLVM ET tarball carries that driver *and* `clang`,
+and the SDK picks the latter, so the first clang run was refused -- correctly, in the
+sense that it would not record a point it could not attribute, but by a rule that was
+one file too narrow.  The assertion now requires the compiler to be *inside* the prefix,
+which is the property that matters: a prefix the SDK silently declined to take is one
+whose compiler is somewhere else entirely.
 
 ## Method, because a ladder of compilers is easy to get wrong
 
@@ -233,9 +254,9 @@ Every row is reproducible from a public URL, and the script knows all of them:
 
 | Builder | Versions | Where |
 |---|---|---|
-| Arch Linux Archive, `arm-none-eabi-{gcc,binutils,newlib}` | 12.2.0, 13.2.0, 14.1.0, 14.2.0, 16.1.0, 16.2.0 | `https://archive.archlinux.org/packages/a/<pkg>/<pkg>-<version>-<arch>.pkg.tar.zst` |
+| Arch Linux Archive, `arm-none-eabi-{gcc,binutils,newlib}` | **12.2.0**, **13.2.0**, **14.1.0**, **14.2.0**, **16.1.0**, **16.2.0** | `https://archive.archlinux.org/packages/a/<pkg>/<pkg>-<version>-<arch>.pkg.tar.zst` |
 | ARM GNU Toolchain releases | 12.3.rel1, 13.2.rel1, **13.3.rel1**, **14.2.rel1**, **14.3.rel1** | `https://developer.arm.com/-/media/Files/downloads/gnu/<ver>/binrel/arm-gnu-toolchain-<ver>-x86_64-arm-none-eabi.tar.xz` |
-| xPack `arm-none-eabi-gcc` (carries the 15.x releases Arch never packaged) | 12.3.1, 13.2.1, 13.3.1, 14.2.1, 15.2.1 | `https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v<ver>/xpack-arm-none-eabi-gcc-<ver>-linux-x64.tar.gz` |
+| xPack `arm-none-eabi-gcc` (carries the 15.x releases Arch never packaged) | 12.3.1, 13.2.1, 13.3.1, 14.2.1, **15.2.1** | `https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v<ver>/xpack-arm-none-eabi-gcc-<ver>-linux-x64.tar.gz` |
 | ARM LLVM embedded toolchain for Arm (clang) | 16.0.0, 17.0.1, 18.1.3, 19.1.1, 19.1.5 | `https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/download/release-<ver>/` -- the asset spelling changed at 19.1.5: `LLVMEmbeddedToolchainForArm-<ver>-Linux-x86_64.tar.xz` before, `LLVM-ET-Arm-<ver>-Linux-x86_64.tar.xz` from 19.1.5 on |
 | Debian's `gcc-arm-none-eabi` | 15:13.2.rel1-2 on Ubuntu noble | `apt install gcc-arm-none-eabi`; the 13.2.1 row here is the committed binary in [toolchain-ab/](toolchain-ab/README.md), not a local install |
 
@@ -256,12 +277,10 @@ are unpacked.
 
 ## Not measured yet
 
-* **clang**, as above: `llvm-19.1.5` and `llvm-17.0.1` are wired into the script and not
-  yet run.
-* **The 15.x release**, the one version band missing from the ladder.  Arch never packaged
-  it for this target; xPack's `15.2.1` was still downloading.  It matters more than the
-  others: it is the row that would say whether the step down from 2.9674 to 2.8181 per MHz
-  happens with GCC 15 or with GCC 16.
+* **A second clang**, `llvm-17.0.1`, which is wired into the script and not yet run.  One
+  clang point says clang is slow here; two would say whether that is a property of the
+  compiler or of one release of it, which is the same question the GCC half of the ladder
+  answered for GCC.
 * **xPack 13.3.1 and 14.2.1**, which would extend "the packager is invisible" to a third
   builder at two more versions.
 * **ARM GNU 13.2.rel1**, whose download was interrupted; 13.3.rel1 already covers that

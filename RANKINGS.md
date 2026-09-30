@@ -319,7 +319,7 @@ compilers now measured on the same board ([TOOLCHAINS.md](TOOLCHAINS.md)) the sa
 the newest compilers are further behind in dual core than in single core -- 5.93% against
 5.30% for 13.2.0, 5.46% against 2.69% for 14.2.0, 3.76% against 3.52% for 12.2.0.  The
 "one core is worth 1.78x two" factor is therefore itself a compiler's number, 1.7745 to
-1.8319 across six releases, and a dual-core comparison is only safe inside one compiler --
+1.8319 across seven releases, and a dual-core comparison is only safe inside one compiler --
 which is how every dual-core row here was measured.
 
 Two things make it the compiler rather than something else that moved with it:
