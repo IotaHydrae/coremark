@@ -11,6 +11,16 @@
 #   tools/toolchain-ladder.sh 13.2.0 arm-14.3.rel1  # named ones only
 #   PROXY=host:port tools/toolchain-ladder.sh       # fetch through a proxy
 #
+# Two things have to be in place first, and both are checked before anything is
+# downloaded rather than forty lines later where the message reads like a probe bug:
+#
+#   export PICO_SDK_PATH=<pico-sdk>                 # or SDK=<pico-sdk>
+#   export PATH=$PWD/.venv/bin:$PATH                # the console reader needs pyusb
+#
+# The results go to $OUT (default /tmp/tcl) and the unpacked prefixes to $TC_DIR
+# (default $HOME/tc).  Put both somewhere that survives a reboot: an earlier ladder
+# on this bench lost its prefixes to /tmp and had to fetch 300 MB again.
+#
 # Four builders, because "which compiler" is not one question:
 #
 #   arch     the Arch Linux Archive's arm-none-eabi-gcc packages, unpacked with the
@@ -32,6 +42,7 @@ TC_DIR=${TC_DIR:-$HOME/tc}
 OUT=${OUT:-/tmp/tcl}
 BOARD=${BOARD:-weact_rp2350a}
 POINTS=${POINTS:-520000}
+SDK=${SDK:-${PICO_SDK_PATH:-}}
 ARCHIVE=https://archive.archlinux.org/packages/a
 ARM_GNU=https://developer.arm.com/-/media/Files/downloads/gnu
 XPACK=https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download
@@ -42,6 +53,19 @@ curl_opts=(-sSL --retry 3)
 if [ -n "${PROXY:-}" ]; then
     curl_opts+=(--proxy "http://$PROXY")
     export http_proxy="http://$PROXY" https_proxy="http://$PROXY"
+fi
+
+# Two things probe.py needs that this script cannot work out for it, checked before
+# anything is downloaded rather than forty lines later, where the message reads like a
+# bug in the probe.  Both were hit on the first run of this script.
+if [ ! -f "$SDK/pico_sdk_init.cmake" ]; then
+    echo "no pico-sdk at '${SDK:-<unset>}': export PICO_SDK_PATH=<pico-sdk>, or pass SDK=<pico-sdk>" >&2
+    exit 2
+fi
+if ! python3 -c "import usb.core" 2>/dev/null; then
+    echo "the python3 on PATH cannot import pyusb, which the console reader needs;" >&2
+    echo "  the checkout's .venv has it:  PATH=\$PWD/.venv/bin:\$PATH tools/toolchain-ladder.sh ..." >&2
+    exit 2
 fi
 
 wanted() {
@@ -182,7 +206,7 @@ for row in "${BUILDERS[@]}"; do
     echo
     echo "########## $name, one core and two, at $POINTS kHz"
     "$HERE/probe.py" --board "$BOARD" --points "$POINTS" --soak 0 \
-        --toolchain "$PREFIX" "${EXTRA[@]+"${EXTRA[@]}"}" --out "$out" ||
+        --sdk "$SDK" --toolchain "$PREFIX" "${EXTRA[@]+"${EXTRA[@]}"}" --out "$out" ||
         echo "  probe exited $?"
 done
 
