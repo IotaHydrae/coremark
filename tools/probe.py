@@ -759,11 +759,18 @@ class Probe:
         # measures the same compiler six times and reports a flat line.
         if self.args.toolchain:
             rec["toolchain"] = self.args.toolchain
-            want = os.path.realpath(os.path.join(self.args.toolchain, "bin/arm-none-eabi-gcc"))
+            # The prefix, not one file inside it.  An LLVM ET tarball carries both
+            # `clang` and an `arm-none-eabi-gcc` driver, and the SDK's
+            # PICO_COMPILER=pico_arm_cortex_m33_clang picks the former -- which is
+            # still the toolchain that was asked for, and a rule that demanded the
+            # latter would refuse to record the only clang row there is.  What must
+            # not pass is a compiler from outside the prefix, because that is what a
+            # prefix the SDK silently declined to take looks like.
+            root = os.path.realpath(self.args.toolchain)
             got = self.compiler_path()
-            if not got or os.path.realpath(got) != want:
+            if not got or not os.path.realpath(got).startswith(root + os.sep):
                 rec["result"] = "toolchain prefix not taken"
-                rec["detail"] = "asked for %s but built with %s" % (want, got)
+                rec["detail"] = "asked for a compiler under %s but built with %s" % (root, got)
                 log("    %s" % rec["detail"])
                 self.store(k, rec)
                 return rec
