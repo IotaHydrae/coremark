@@ -66,6 +66,97 @@ constants: 2.8181 per MHz on an RP2350 is GCC 16.2.0's number, 2.9674 is GCC 13.
 and a row without its compiler is not reproducible.  That is why
 `tools/probe.py` records the compiler with every point and why `--toolchain` asserts it.
 
+## Why the newer compiler is slower
+
+The 5.30% between 13.2.0 and 16.2.0 is not one decision, and both halves of the search
+are worth recording, because each of them closed off a plausible answer.
+
+**It is two layers, not one.**  The same board, the same configuration, one core, with
+both compilers dropped to `-O2` -- the gap is still there, but it is smaller:
+
+| 520 MHz, one core | GCC 13.2.1 | GCC 16.2.0 | gap |
+|---|---|---|---|
+| `-O3` | 2.9674 per MHz | 2.8181 | **+5.30%** |
+| `-O2` | 2.8651 | 2.8066 | **+2.08%** |
+
+So about 2.1% is present at `-O2` -- base passes, instruction selection, register
+allocation -- and about 3.2% arrives with the `-O3` set alone.  Neither half is a single
+pass, and a first reading of `-fopt-info` was misleading for exactly that reason: the
+one optimization only the newer compiler reported (an unrolled pseudo-vectorization of a
+four-byte copy loop in `core_init_state`) is far too small to carry 5%.
+
+**Where the code differs.**  Counted per function in the two `-O3` binaries committed in
+[toolchain-ab/](toolchain-ab/README.md):
+
+| | GCC 13.2.1 | GCC 16.2.0 | |
+|---|---|---|---|
+| the matrix kernel, inlined into `matrix_test` | 340 instructions | 338 | unchanged |
+| `core_state_transition` | 185 | 207 | **+12%** |
+| `core_bench_list` | 317 | 334 | +5% |
+| `crcu16` / `crc16` / `crcu32` | 84 / 85 / 166 | 113 / 112 / 211 | +34% / +32% / +27% |
+
+The matrix algorithms are inlined into `matrix_test` in both builds and that function
+differs by two instructions -- which says the difference is in the state machine and the
+list, and not which of them.
+
+**Where the time goes, measured.**  All three algorithms are dispatched from inside
+`calc_func` -- the comparison function the list traversal calls -- so a build can be
+gated to skip one of them, and the difference between two such builds *is* that
+algorithm's time.  Six builds, three variants against two compilers, same board, 150 MHz
+(the longer run is the better measurement; the skipped kernels make the run short enough
+that CoreMark refuses to call it a score, so the timings come from `Total time (secs)`
+in the console rather than from the score line):
+
+| 150 MHz, seconds | list only | list + matrix | list + state |
+|---|---|---|---|
+| GCC 13.2.1 | 4.718 | 7.746 | 8.254 |
+| GCC 16.2.0 | 4.689 | 7.787 | 8.726 |
+
+which separates into:
+
+| algorithm | share of the run (GCC 13) | GCC 16.2.0 against 13.2.1 |
+|---|---|---|
+| list | 42% | **-0.6%** (the newer compiler is faster here) |
+| matrix | 27% | +2.3% |
+| state | 31% | **+14.2%** |
+
+**It is the state machine.**  `core_bench_state` and the `core_state_transition` it
+drives carry about **4.4 of the 5.30 points** on their own; the matrix accounts for 0.6
+and the list gives a little back.  The three parts sum to +4.80% where a single run of
+the whole workload measures +5.30%, and the difference is the interaction the
+decomposition cannot see -- but the shape of it is not in doubt, and it is the opposite
+of what the static counts suggested: `core_bench_list` grew by 5% of instructions and
+did not get slower.
+
+**Two named decisions, measured rather than argued.**  Each was turned back on and the
+point re-run on the board:
+
+| what GCC 16 does differently | recovered |
+|---|---|
+| `calc_func` is no longer inlined, so `core_bench_list` calls it **twice per comparison** where GCC 13 called `cmp_complex` once with `calc_func` already inside it | **+1.01%** -- forced `always_inline`: 2.8181 -> 2.8465 |
+| `core_list_mergesort` becomes a `.constprop` clone called from `core_bench_list`, instead of being inlined into it | **+0.53%** -- `-fno-ipa-cp-clone`: -> 2.8330 |
+
+That is 1.5% of the 5.30%, and it is everything that could be pointed at and then turned
+off.  Neither of them is the list's own loop either: that algorithm measures *faster* in
+the newer compiler.  Both decisions are on the path that *dispatches* into the state
+machine -- `calc_func` is what decides whether `core_bench_state` runs at all -- so what
+they buy is on the state side of that call, which is where the remaining 3.8 points are.
+
+Those 3.8 points have no name, and that is the finding.  No pass could be turned off to
+recover them: **the thresholds did not move** -- both compilers report the same
+`inline-min-speedup=15`, `inline-unit-growth=40`, `max-inline-insns-auto=30` and
+`max-inline-insns-single=200` under `-O3` -- so what changed is the *estimates* those
+thresholds are applied to.  The state machine's translated code came out 12% bigger and
+runs 14% slower, and no single decision in the compiler did that; its cost model simply
+thinks a different program is the right one to emit.
+
+**The flag axis is closed, from the other side.**  `-O2` costs GCC 16 0.41% and `-Os`
+costs it 17.9%, and both losses are the same proportion at 150 MHz as at 520 -- which is
+what says a score here tracks the number of instructions *executed* and not anything
+about code size or fetch.  A compiler that is 5% slower by executing 5% more
+instructions is not going to be fixed by a flag; it is a different compiler's opinion
+about what the code should be.
+
 ## The same compiler, packaged by somebody else
 
 A score that moved between packagers would be a score nobody could reproduce from a
@@ -181,10 +272,13 @@ are unpacked.
   measured on an RP2350; one Pico W point under GCC 13.2.0 would say whether the M0+ moves
   by the same factor, and that is the same open question as [RANKINGS.md](RANKINGS.md)
   section 8's.
-* **Why 13.2.0 wins.**  The instruction-mix difference is visible in the disassembly (2.5%
-  more `.text`, 2.1% more instructions, and a CRC kernel that grew from 166 to 211
-  instructions in the newer compiler), but which pass is responsible has not been
-  established, and the flag axis that might have explained it is closed: see section 8.
+* **What the state machine's 14.2% actually is.**  The accounting above says where the
+  5.30% lives -- `core_bench_state` and the `core_state_transition` it drives -- and it
+  says what it is not: not the list, not the matrix, not any pass that can be turned off,
+  and not the inlining thresholds.  What is left is the translated code itself: 22 more
+  instructions than GCC 13 emitted for the same state machine.  Which of them is the
+  expensive one is a question for a cycle-accurate model or a much finer instrument than
+  this bench has.
 
 ## The state of this file, and why
 
