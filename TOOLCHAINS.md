@@ -175,14 +175,18 @@ version number, so the same measurement was run on toolchains from other builder
 |---|---|---|---|---|---|
 | Arch 13.2.0 | Arch Repository 13.2.0 | 445.111 | 1543.052 | 2768.943 | 2.9674 |
 | ARM GNU 13.3.rel1 | Arm GNU Toolchain 13.3.Rel1 (Build arm-13.24) 13.3.1 | 445.111 | 1543.052 | 2768.909 | 2.9674 |
+| xPack 13.3.1 | xPack GNU Arm Embedded GCC 13.3.1 20240614 | 445.113 | 1543.051 | 2774.859 | 2.9674 |
 | Debian 13.2.1 | 15:13.2.rel1-2 (the committed binary, single core only) | -- | 1543.051 | -- | 2.9674 |
 | Arch 14.2.0 | Arch Repository 14.2.0 | 434.087 | 1504.837 | 2756.757 | 2.8939 |
 | ARM GNU 14.2.rel1 | Arm GNU Toolchain 14.2.Rel1 (Build arm-14.52) 14.2.1 | 434.087 | 1504.838 | 2756.976 | 2.8939 |
+| xPack 14.2.1 | xPack GNU Arm Embedded GCC 14.2.1 20241119 | 434.090 | 1504.838 | 2748.157 | 2.8939 |
 | ARM GNU 14.3.rel1 | Arm GNU Toolchain 14.3.Rel1 (Build arm-14.174) 14.3.1 | 434.087 | 1504.838 | 2740.230 | 2.8939 |
 
-Three independent builds of the 13.x generation -- Debian's, Arch's and ARM's own -- read
-1543.051, 1543.052 and 1543.052 at 520 MHz single core, and the 14.2 pair agrees to
-0.00007% on the single-core column and 0.008% on the dual-core one.  So the ladder is a
+Four independent builds of the 13.x generation -- Debian's, Arch's, ARM's own and xPack's --
+read 1543.051, 1543.052, 1543.052 and 1543.051 at 520 MHz single core: four packagers, four
+package versions, one number to six significant figures.  Three builds of the 14.2
+generation agree the same way, 1504.837 and 1504.838 twice, to 0.00007% on the single-core
+column.  So the ladder is a
 ladder of **GCC releases**: the packager, the binutils version, the newlib version and the
 configure flags that go with them are invisible in this number, and a row can be compared
 against somebody else's by version alone.
@@ -202,10 +206,13 @@ GCC on the ladder, including the one at the bottom of it:
 | Toolchain | 150 MHz | 520 MHz, 1 core | 520 MHz, 2 cores | per MHz |
 |---|---|---|---|---|
 | clang 19.1.5 (LLVM ET) | 418.956 | 1452.371 | 2598.331 | **2.7930** |
+| clang 17.0.1 (LLVM ET) | 416.679 | 1444.478 | 2573.543 | **2.7778** |
 
-0.9% below GCC 16.2.0 and 5.9% below GCC 13.2.0.  One compiler, one workload, one board:
-this says nothing about clang in general, and everything about how much of a CoreMark
-number is the compiler.
+Both are below every GCC on the ladder -- 19.1.5 by 0.9% against 16.2.0, the worst of them,
+and 17.0.1 by another 0.5% -- so this is clang on this workload rather than one release of
+it, which is the same question the GCC half of the ladder answers with four packagers
+agreeing and seven versions not.  One workload, one board: it says nothing about clang in
+general and everything about how much of a CoreMark number is the compiler.
 
 The recipe is `tools/toolchain-ladder.sh llvm-19.1.5`: it unpacks the tarball, finds
 `bin/clang`, and configures the build with `--cmake-arg PICO_COMPILER=pico_arm_cortex_m33_clang`,
@@ -256,8 +263,8 @@ Every row is reproducible from a public URL, and the script knows all of them:
 |---|---|---|
 | Arch Linux Archive, `arm-none-eabi-{gcc,binutils,newlib}` | **12.2.0**, **13.2.0**, **14.1.0**, **14.2.0**, **16.1.0**, **16.2.0** | `https://archive.archlinux.org/packages/a/<pkg>/<pkg>-<version>-<arch>.pkg.tar.zst` |
 | ARM GNU Toolchain releases | 12.3.rel1, 13.2.rel1, **13.3.rel1**, **14.2.rel1**, **14.3.rel1** | `https://developer.arm.com/-/media/Files/downloads/gnu/<ver>/binrel/arm-gnu-toolchain-<ver>-x86_64-arm-none-eabi.tar.xz` |
-| xPack `arm-none-eabi-gcc` (carries the 15.x releases Arch never packaged) | 12.3.1, 13.2.1, 13.3.1, 14.2.1, **15.2.1** | `https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v<ver>/xpack-arm-none-eabi-gcc-<ver>-linux-x64.tar.gz` |
-| ARM LLVM embedded toolchain for Arm (clang) | 16.0.0, 17.0.1, 18.1.3, 19.1.1, 19.1.5 | `https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/download/release-<ver>/` -- the asset spelling changed at 19.1.5: `LLVMEmbeddedToolchainForArm-<ver>-Linux-x86_64.tar.xz` before, `LLVM-ET-Arm-<ver>-Linux-x86_64.tar.xz` from 19.1.5 on |
+| xPack `arm-none-eabi-gcc` (carries the 15.x releases Arch never packaged) | 12.3.1, 13.2.1, **13.3.1**, **14.2.1**, **15.2.1** | `https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v<ver>/xpack-arm-none-eabi-gcc-<ver>-linux-x64.tar.gz` |
+| ARM LLVM embedded toolchain for Arm (clang) | 16.0.0, **17.0.1**, 18.1.3, 19.1.1, **19.1.5** | `https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/download/release-<ver>/` -- the asset spelling changed at 19.1.5: `LLVMEmbeddedToolchainForArm-<ver>-Linux-x86_64.tar.xz` before, `LLVM-ET-Arm-<ver>-Linux-x86_64.tar.xz` from 19.1.5 on |
 | Debian's `gcc-arm-none-eabi` | 15:13.2.rel1-2 on Ubuntu noble | `apt install gcc-arm-none-eabi`; the 13.2.1 row here is the committed binary in [toolchain-ab/](toolchain-ab/README.md), not a local install |
 
 Bold entries are the ones measured here; the rest are wired into the script and waiting.
@@ -277,15 +284,13 @@ are unpacked.
 
 ## Not measured yet
 
-* **A second clang**, `llvm-17.0.1`, which is wired into the script and not yet run.  One
-  clang point says clang is slow here; two would say whether that is a property of the
-  compiler or of one release of it, which is the same question the GCC half of the ladder
-  answered for GCC.
-* **xPack 13.3.1 and 14.2.1**, which would extend "the packager is invisible" to a third
-  builder at two more versions.
-* **ARM GNU 13.2.rel1**, whose download was interrupted; 13.3.rel1 already covers that
-  generation from ARM's side.
-* **Older than 12.2.0**, and any builder other than the four above (Zephyr's SDK is the
+* **ARM GNU 13.2.rel1**, the one row that is wired in and still unreachable: the tarball's
+  URL on `developer.arm.com` times out (`curl` gets no response at all, while the site root
+  and the 13.3/14.2/14.3 tarballs answer), and it has failed twice on this bench.  It is
+  the least valuable of the missing rows -- 13.3.rel1 covers that generation from ARM's
+  side and xPack's 13.3.1 from a fourth packager -- so it is left failing rather than
+  chased.
+* **Older than 12.2.0**, and any builder other than the five above (Zephyr's SDK is the
   obvious next one).
 * **Whether the ladder looks the same on an RP2040.**  The 5.30% has only ever been
   measured on an RP2350; one Pico W point under GCC 13.2.0 would say whether the M0+ moves
