@@ -174,16 +174,31 @@ to a JPEG decoder -- and it now runs on this same board with pico-turbo owning t
 ([`examples/pico/rp2350-pico2/`](https://github.com/IotaHydrae/embench-iot/tree/master/examples/pico/rp2350-pico2),
 which imports this repository's flash path and console reader rather than copying them).
 
-Two of the nineteen are enough to change the conclusion:
+[Dhrystone 2.1](https://github.com/IotaHydrae/dhrystone-pico) runs on it too, in a port
+that compiles Weicker's three source files byte for byte as netlib distributes them and
+supplies the three things a 1988 Unix program expects from beside the code rather than
+inside it.  Four workloads, one board, one clock, one pair of compilers:
 
-| 520 MHz, one core, scale 100 | GCC 13.2.1 | GCC 16.2.0 | |
+| 520 MHz, one core | GCC 13.2.1 | GCC 16.2.0 | GCC 16 against 13 |
 |---|---|---|---|
-| `statemate`, a state machine | 700000 us | 713423 us | **GCC 16 is 1.9% slower** |
-| `matmult-int`, integer matrix multiply | 817093 us | 592063 us | **GCC 16 is 27.5% faster** |
+| CoreMark | 2.9674 per MHz | 2.8181 per MHz | **5.3% slower** |
+| Embench `statemate` | 700000 us | 713423 us | 1.9% slower |
+| Embench `matmult-int` | 817093 us | 592063 us | **27.5% faster** |
+| Dhrystone 2.1 | 1.581 DMIPS/MHz | 1.600 DMIPS/MHz | 1.2% faster |
 
-Both verified their own results, both were written and read back and compared byte for
-byte, both report the clock they measured themselves at, and both ran at the same
-scaling -- the four things this repository asks of any row.
+Every row verified its own result -- CoreMark and Embench through their own checkers,
+Dhrystone through the block of final values it prints, which its harness has to compare
+because the benchmark leaves that to the reader -- and every row was written to the
+flash, read back and compared byte for byte.
+
+**The surprise is Dhrystone.**  It is the workload with the worst reputation for being
+easy to improve without doing the work: its string copies are of known constant length
+and naturally aligned, its procedures get inlined, its dead code goes.  Measured, it
+gives one of the two *smallest* differences of the four, and the largest comes from an
+integer matrix multiply nobody has heard of.  The reputation is not wrong, but it is
+about a different thing: it describes what a vendor will do when it sets out to game a
+benchmark -- special flags, hand-written library routines, a compiler tuned for one
+program -- and not what two ordinary `-O3` builds of the same program do.
 
 **So "GCC 13 is the best compiler for this chip" is not something that is true.**  On the
 workload this file was built around, GCC 13 wins by 5.3%.  On another of Embench's
