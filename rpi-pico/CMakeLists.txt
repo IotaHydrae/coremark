@@ -32,7 +32,10 @@
 #         -DPICO_TURBO_DIR=/path/to/pico-turbo \
 #         -DPICO_TURBO_SYS_CLK_KHZ=570000 -DPICO_TURBO_VREG_VOLTAGE=VREG_VOLTAGE_1_60
 #   cmake --build build -j
-#   cmake --build build --target flash      # erase, program, verify, run
+#   cmake --build build --target flash-erase  # erase, program, verify -- but see
+#                                             # the note at the target: verify is
+#                                             # not evidence; tools/probe.py reads
+#                                             # the flash back and compares it
 #
 # Compare two frequencies on identical work with -DCOREMARK_ITERATIONS=<n>;
 # left alone, the iteration count scales with the clock so that every run takes
@@ -131,17 +134,14 @@ else()
     set(COREMARK_SYS_CLK_KHZ ${PICO_BASE_SYS_CLK_KHZ})
 endif()
 
-# Iterations.  Zero (the default) leaves ITERATIONS undefined and lets CoreMark
-# calibrate: it runs for a second, then scales so the measured run is about ten
-# seconds -- which is what CoreMark's reporting rules ask for, at every clock and
-# without a formula to get wrong.  A fixed count is only useful to compare two
-# runs on identical work; note that a count that is fine at 150 MHz is under
-# CoreMark's ten seconds at 500 MHz, which it reports as "Errors detected" even
-# though the results were correct.
-# (The port's core_portme.c has a #ifndef ITERATIONS fallback, so ITERATIONS
-# cannot be left undefined and CoreMark cannot calibrate itself: the count is
-# computed here instead, from the clock, so that a run takes about twelve
-# seconds -- which is CoreMark's own rule for a reportable result.)
+# Iterations.  A count that is fine at 150 MHz is under CoreMark's ten seconds at
+# 500 MHz, which it reports as "Errors detected" even though the results were
+# correct.  The port's core_portme.c has a #ifndef ITERATIONS fallback, so
+# ITERATIONS cannot be left undefined and CoreMark cannot calibrate itself: the
+# count is computed here instead, from the clock, so that a run takes about twelve
+# seconds -- which is CoreMark's own rule for a reportable result.  Zero means
+# "compute it" (the default); a number is only useful to compare two runs on
+# identical work.
 if(NOT DEFINED COREMARK_ITERATIONS OR COREMARK_ITERATIONS EQUAL 0)
     math(EXPR COREMARK_ITERATIONS
         "${COREMARK_BASE_ITRE} * ${COREMARK_SYS_CLK_KHZ} / ${PICO_BASE_SYS_CLK_KHZ}")
@@ -231,9 +231,14 @@ add_custom_target(
     COMMENT "Print target size info"
 )
 
-# Erase first, then program, then verify: openocd has been seen reporting
+# Erase first, then program, then verify.  openocd has been seen reporting
 # "Verified OK" here after writing only the first couple of kilobytes of the
-# image, which leaves the chip running whatever was there before.
+# image, which leaves the chip running whatever was there before -- so openocd's
+# `verify` is **not evidence** that the flash matches the build, and neither is
+# the exit status of these targets.  The verified path is tools/probe.py's:
+# erase, let the bootrom come up, write with picotool, read the flash back and
+# compare byte for byte.  These targets are for a human at a bench, not for a
+# measurement (AGENTS.md hardware discipline 2 and 8b).
 if(NOT DEFINED PICO_OPENOCD_TARGET)
     if(${PICO_BOARD} STREQUAL "pico" OR ${PICO_PLATFORM} STREQUAL "rp2040")
         set(PICO_OPENOCD_TARGET target/rp2040.cfg)
