@@ -1,0 +1,322 @@
+ -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second cor[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096407
+Total time (secs): 25.096407
+Iterations/Sec   : 2125.085077
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.085077 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 1 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096404
+Total time (secs): 25.096404
+Iterations/Sec   : 2125.085331
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.085331 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 2 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096407
+Total time (secs): 25.096407
+Iterations/Sec   : 2125.085077
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.085077 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 3 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096400
+Total time (secs): 25.096400
+Iterations/Sec   : 2125.085670
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.085670 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 4 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096414
+Total time (secs): 25.096414
+Iterations/Sec   : 2125.084484
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.084484 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 5 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096418
+Total time (secs): 25.096418
+Iterations/Sec   : 2125.084145
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.084145 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 6 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400001 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096404
+Total time (secs): 25.096404
+Iterations/Sec   : 2125.085331
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.085331 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 7 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096401
+Total time (secs): 25.096401
+Iterations/Sec   : 2125.085585
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.085585 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 8 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400000 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25289255
+Total time (secs): 25.289255
+Iterations/Sec   : 2108.879838
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2108.879838 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 9 of 10
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 400(MHz), Flash speed: 50(MHz)
+DIAG: check_sys_clock_khz(400000) -> achievable (vco 1200000000, postdiv 3/1)
+PICO-TURBO: 400000 kHz asked, 400000 kHz configured, 400001 kHz measured, vreg sel 17, flash 50000 kHz, clk_peri 400000 kHz, usb ok
+Parallel context on core 1
+Parallel context on core 0
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 25096409
+Total time (secs): 25.096409
+Iterations/Sec   : 2125.084908
+Iterations       : 53332
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Parallel Pico second core : 2
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[1]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[1]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[1]crcstate      : 0x8e3a
+[0]crcfinal      : 0x2a29
+[1]crcfinal      : 0x2a29
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 2125.084908 / GCC13.2.1 20231009 -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK / 2:Pico second core
+COREMARK-REPEAT: run 10 of 10
+COREMARK-REPEAT: all 10 runs finished
+[reader] done

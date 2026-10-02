@@ -1,0 +1,210 @@
+{
+ "150000/auto/1/1": {
+  "asked": 150000,
+  "banners": 1,
+  "checks": {
+   "a score": true,
+   "clock landed where asked": true,
+   "flash verified": true,
+   "no CoreMark errors": true,
+   "validated": true
+  },
+  "configured": 150000,
+  "counter": [],
+  "div": null,
+  "errors": 0,
+  "flash_khz": 37500,
+  "iterations": [
+   5000
+  ],
+  "khz": 150000,
+  "measured": 150000,
+  "mt": 1,
+  "readback": 0,
+  "rep": 1,
+  "result": "ok",
+  "scores": [
+   445.112667
+  ],
+  "stamp": "2026-09-28 14:23:42",
+  "validated": 1,
+  "vreg_sel": 11
+ },
+ "300000/auto/1/1": {
+  "asked": 300000,
+  "banners": 1,
+  "checks": {
+   "a score": true,
+   "clock landed where asked": true,
+   "flash verified": true,
+   "no CoreMark errors": true,
+   "validated": true
+  },
+  "configured": 300000,
+  "counter": [],
+  "div": null,
+  "errors": 0,
+  "flash_khz": 50000,
+  "iterations": [
+   10000
+  ],
+  "khz": 300000,
+  "measured": 300000,
+  "mt": 1,
+  "readback": 0,
+  "rep": 1,
+  "result": "ok",
+  "scores": [
+   890.220976
+  ],
+  "stamp": "2026-09-28 14:24:20",
+  "validated": 1,
+  "vreg_sel": 13
+ },
+ "400000/auto/1/1": {
+  "asked": 400000,
+  "banners": 1,
+  "checks": {
+   "a score": true,
+   "clock landed where asked": true,
+   "flash verified": true,
+   "no CoreMark errors": true,
+   "validated": true
+  },
+  "configured": 400000,
+  "counter": [],
+  "div": null,
+  "errors": 0,
+  "flash_khz": 50000,
+  "iterations": [
+   13333
+  ],
+  "khz": 400000,
+  "measured": 400000,
+  "mt": 1,
+  "readback": 0,
+  "rep": 1,
+  "result": "ok",
+  "scores": [
+   1186.961108
+  ],
+  "stamp": "2026-09-28 14:24:55",
+  "validated": 1,
+  "vreg_sel": 17
+ },
+ "400000/auto/2/1": {
+  "asked": 400000,
+  "banners": 1,
+  "checks": {
+   "a score": true,
+   "clock landed where asked": true,
+   "flash verified": true,
+   "no CoreMark errors": true,
+   "validated": true
+  },
+  "configured": 400000,
+  "counter": [],
+  "div": null,
+  "errors": 0,
+  "flash_khz": 50000,
+  "iterations": [
+   53332
+  ],
+  "khz": 400000,
+  "measured": 400001,
+  "mt": 2,
+  "readback": 0,
+  "rep": 1,
+  "result": "ok",
+  "scores": [
+   2115.930722
+  ],
+  "stamp": "2026-09-28 14:27:54",
+  "validated": 1,
+  "vreg_sel": 17
+ },
+ "400000/auto/2/10": {
+  "asked": 400000,
+  "banners": 10,
+  "checks": {
+   "a score": true,
+   "clock landed where asked": true,
+   "flash verified": true,
+   "no CoreMark errors": true,
+   "validated": true
+  },
+  "configured": 400000,
+  "counter": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "div": null,
+  "errors": 0,
+  "flash_khz": 50000,
+  "iterations": [
+   53332,
+   53332,
+   53332,
+   53332,
+   53332,
+   53332,
+   53332,
+   53332,
+   53332,
+   53332
+  ],
+  "khz": 400000,
+  "measured": 400000,
+  "mt": 2,
+  "readback": 0,
+  "rep": 10,
+  "result": "ok",
+  "scores": [
+   2125.085077,
+   2125.085331,
+   2125.085077,
+   2125.08567,
+   2125.084484,
+   2125.084145,
+   2125.085331,
+   2125.085585,
+   2108.879838,
+   2125.084908
+  ],
+  "stamp": "2026-09-28 14:28:45",
+  "validated": 10,
+  "vreg_sel": 17
+ },
+ "500000/auto/1/1": {
+  "banners": 0,
+  "checks": {
+   "a score": false,
+   "clock landed where asked": false,
+   "flash verified": true,
+   "no CoreMark errors": true,
+   "validated": false
+  },
+  "counter": [],
+  "div": null,
+  "errors": 0,
+  "iterations": [],
+  "khz": 500000,
+  "mt": 1,
+  "pc": "0x1000011c",
+  "readback": 0,
+  "rep": 1,
+  "result": "hang",
+  "scores": [],
+  "stamp": "2026-09-28 14:25:31",
+  "symbol": "isr_hardfault",
+  "validated": 0
+ }
+}

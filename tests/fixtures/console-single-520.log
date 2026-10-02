@@ -1,0 +1,26 @@
+-mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK
+EXPERIMENT-DWT: 168[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 520(MHz), Flash speed: 52(MHz)
+DIAG: check_sys_clock_khz(520000) -> achievable (vco 1560000000, postdiv 3/1)
+PICO-TURBO: 520000 kHz asked, 520000 kHz configured, 520000 kHz measured, vreg sel 19, flash 52000 kHz, clk_peri 520000 kHz, usb ok
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 11232946
+Total time (secs): 11.232946
+Iterations/Sec   : 1543.050238
+Iterations       : 17333
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[0]crcfinal      : 0x83d9
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 1543.050238 / GCC13.2.1 20231009 -mcpu=cortex-m33
+[reader] done

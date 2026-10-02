@@ -1,0 +1,21 @@
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 520(MHz), Flash speed: 52(MHz)
+DIAG: check_sys_clock_khz(520000) -> achievable (vco 1560000000, postdiv 1/3)
+PICO-TURBO: 520000 kHz asked, 520000 kHz configured, 520000 kHz measured, vreg sel 19, flash 52000 kHz, clk_peri 520000 kHz, usb ok
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 4718286
+Total time (secs): 4.718286
+Iterations/Sec   : 1059.706851
+ERROR! Must execute for at least 10 secs for a valid result!
+Iterations       : 5000
+Compiler version : GCC16.2.0
+Compiler flags   : -O3
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[0]crcfinal      : 0xcc42
+Errors detected

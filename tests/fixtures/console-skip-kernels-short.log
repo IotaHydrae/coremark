@@ -1,0 +1,29 @@
+-march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -O3 -DNDEBUG / STACK
+[reader] [Errno 32] Pipe error -- re-attaching
+
+
+
+Raspberry Pi Pico CoreMark benchmark running ...
+CPU speed: 150(MHz), Flash speed: 37(MHz)
+DIAG: check_sys_clock_khz(150000) -> achievable (vco 1500000000, postdiv 5/2)
+PICO-TURBO: 150000 kHz asked, 150000 kHz configured, 150000 kHz measured, vreg sel 11, flash 37500 kHz, clk_peri 150000 kHz, usb ok
+2K performance run parameters for coremark.
+[0]ERROR! list crc 0x1539 - should be 0xe714
+[0]ERROR! matrix crc 0x0000 - should be 0x1fd7
+[0]ERROR! state crc 0x0000 - should be 0x8e3a
+CoreMark Size    : 666
+Total ticks      : 4718286
+Total time (secs): 4.718286
+Iterations/Sec   : 1059.706851
+ERROR! Must execute for at least 10 secs for a valid result!
+Iterations       : 5000
+Compiler version : GCC13.2.1 20231009
+Compiler flags   : -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mcmse -mfloat-abi=softfp -ftls-model=local-exec -g -DNDEBUG -O3 -DCOREMARK_SKIP_STATE -DCOREMARK_SKIP_MATRIX
+Memory location  : STACK
+seedcrc          : 0xe9f5
+[0]crclist       : 0x1539
+[0]crcmatrix     : 0x0000
+[0]crcstate      : 0x0000
+[0]crcfinal      : 0xc309
+Errors detected
+[reader] idle for 105s, stopping
