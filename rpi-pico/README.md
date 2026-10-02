@@ -1,42 +1,71 @@
 # CoreMark port for Raspberry Pi Pico
 
-CoreMark runs on one core or on both (`-DCOREMARK_MULTITHREAD=2`).  Two cores
-are worth having: it is the same measurement with more current asked of the
-regulator, which is where a marginal voltage shows up, and it is where the
-overclock stops looking free.
+> This port only runs CoreMark and reports what the chip was actually doing; the
+> clock, the core voltage and the flash divider belong to
+> [pico-turbo](https://github.com/IotaHydrae/pico-turbo).  Measured results for
+> every board are in [MEASUREMENTS.md](MEASUREMENTS.md).
 
-The clock, the core voltage and the flash divider belong to
-[pico-turbo](https://github.com/IotaHydrae/pico-turbo): this project used to
-carry its own overclocking profiles and its own divider arithmetic, and on an
-RP2350 that arithmetic asked for an odd divider the boot stage 2 refuses.
+## TL;DR
+
+- **Build**: `cmake -S . -B build -DPICO_BOARD=<board> -DPICO_TURBO_DIR=<pico-turbo>
+  -DPICO_TURBO_SYS_CLK_KHZ=<kHz>`, then `cmake --build build -j`.
+- **Run**: `COREMARK_MULTITHREAD=1` or `2` (one context per core; two draw more
+  current and are where a marginal voltage shows up).  `COREMARK_REPEAT=N` makes
+  the soak a build option; `COREMARK_ITERATIONS=0` scales each run to ~12 s.
+- **Judge by the state line**, not the score alone: it carries the clock the
+  hardware counter *measured*, the vreg select and whether USB came up.
+- The `flash` / `flash-erase` targets use openocd's `verify`, which is **not
+  evidence** a write matched the build.  The verified path is `tools/probe.py`
+  (erase → bootrom → picotool → read back and compare).  See
+  [../AGENTS.md](../AGENTS.md) hardware discipline 2 and 8b.
+
+## Build and flash
 
 ```bash
 # one core at 520 MHz and 1.60 V
 cmake -S . -B build -DPICO_BOARD=pico2 \
-      -DPICO_TURBO_DIR=/path/to/pico-turbo \
+      -DPICO_TURBO_DIR=<pico-turbo> \
       -DPICO_TURBO_SYS_CLK_KHZ=520000 -DPICO_TURBO_VREG_VOLTAGE=VREG_VOLTAGE_1_60
 cmake --build build -j
-cmake --build build --target flash-erase    # erase, program, verify, run
+cmake --build build --target flash-erase    # convenience; verify is not evidence
 ```
 
-Every run prints one line that says what the chip was doing, so a log is
-readable on its own -- including the clock measured by the hardware frequency
-counter, not just the one that was configured:
+For a plain Pico or Pico 2 pass `-DPICO_BOARD=pico` / `-DPICO_BOARD=pico2`; the
+RP2350's RISC-V core builds with `-DPICO_PLATFORM=rp2350-riscv`.  Flashing from a
+host with picotool instead:
+
+```bash
+picotool load -fvux ./rpi-pico-coremark.uf2
+```
+
+Every run prints one line that says what the chip was doing, so a log is readable
+on its own -- including the clock measured by the hardware frequency counter, not
+just the one that was configured:
 
 ```text
 PICO-TURBO: 520000 kHz asked, 520000 kHz configured, 520000 kHz measured,
             vreg sel 19, flash 52000 kHz, clk_peri 520000 kHz, usb ok
 ```
 
+## Options
+
 | Option | Meaning |
 |---|---|
 | `COREMARK_ITERATIONS` | 0 (default) scales with the clock, and doubles with two contexts, so a run takes about twelve seconds -- CoreMark's own rule for a reportable result.  Set a number to compare two runs on identical work. |
-| `COREMARK_REPEAT` | Runs the benchmark this many times, rebooting through the watchdog between runs, so a soak is a build option.  ~50 runs is ten minutes. |
+| `COREMARK_REPEAT` | Runs the benchmark this many times, rebooting through the watchdog between runs, so a soak is a build option.  ~50 single-core runs is about ten minutes; a 520 MHz dual-core soak measured 26.4 s per run, so ~50 is closer to 28 minutes. |
 | `COREMARK_MULTITHREAD` | Contexts: 2 puts one on each core. |
-| `PICO_TURBO_AUTOTUNE` | Search for the frequency and voltage instead of being given them. |
+| `PICO_TURBO_AUTOTUNE` | Search for the frequency and voltage instead of being given them (pico-turbo's option). |
 
-Measured on a Pico 2 (RP2350A rev 2, heatsink), single core unless stated,
-`Correct operation validated` in every case:
+Both USB and UART debug output are enabled.  `PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS`
+is set to **20000 ms** by `CMakeLists.txt`, so each boot waits for a reader before
+it starts: the SDK discards output written while no host has the port open, and a
+soak reboots between runs.
+
+Onboard LED: on = test in progress, blinking = test complete.
+
+## Measured, on a Luckfox Pico 2 (RP2350A rev 2, heatsink)
+
+Single core unless stated, `Correct operation validated` in every case:
 
 | Clock | Voltage | Iterations/sec | Notes |
 |---|---|---|---|
@@ -54,16 +83,18 @@ find.  The last row is the interesting one -- a pico-turbo search accepted
 570 MHz at 1.60 V and this benchmark cannot start there, which is the reason to
 accept a frequency with a long, mixed workload rather than a short self-check.
 
-Measured results on the boards this was run on, and the method notes that go with
-them: [MEASUREMENTS.md](MEASUREMENTS.md).
+Every board's raw tables, soak records and method notes are in
+[MEASUREMENTS.md](MEASUREMENTS.md); the cross-board ranking is
+[../RANKINGS.md](../RANKINGS.md).
 
-Onboard LED behavior:
-- On: Test in progress
-- Blinking: Test complete
+### A recorded run (historical, GCC 13.2.1, 400 MHz)
 
-Both USB and UART debug port are enabled. The default USB connection wait timeout is 3000 ms.
+This block predates both pico-turbo and the `PICO-TURBO:` state line.  It is kept
+because [RANKINGS.md](../RANKINGS.md) section 2 quotes its 1.9544 per MHz as an
+open question; it does not name the board it was taken on, so it is an
+observation and not a correction to the tables.
 
-```bash
+```text
 Raspberry Pi Pico CoreMark benchmark running ...
 CPU speed: 400(MHz), Flash speed: 100(MHz)
 
@@ -85,63 +116,22 @@ Correct operation validated. See README.md for run and reporting rules.
 CoreMark 1.0 : 781.776465 / GCC13.2.1 20231009 -mcpu=cortex-m0plus -mthumb -g -O3 -DNDEBUG / STACK
 ```
 
-## Build & Flash
+## Overclocking moved to pico-turbo
 
-For pico and pico2 board
+`OVERCLOCK_ENABLED` and `OVERCLOCK_PROFILE` used to be options of this port, with
+their own SYS_CLK / FLASH_CLK / voltage table for `pico`.  They no longer exist
+here: the clock, the voltage and the divider are pico-turbo's, and this project
+does not carry a second profile table that can disagree with it.  The pico-turbo
+board files are the profiles now (`boards/<board>.cmake`, selected with
+`-DPICO_BOARD` and `-DPICO_TURBO_PROFILE`).
 
-```
-cmake -DPICO_BOARD=pico  .. -G Ninja
-cmake -DPICO_BOARD=pico2 .. -G Ninja
-```
-
-And riscv core on rp2350
-
-```bash
-cmake -DPICO_PLATFORM=rp2350-riscv -DOVERCLOCK_ENABLED=1 -DOVERCLOCK_PROFILE=1 .. -G Ninja
-```
-
-Flash firmware via picotool
-
-```bash
-sudo picotool load -fvux ./rpi-pico-coremark.uf2
-```
-
-## Configs
-
-There are several configuration options available in CMake.
-
-### OVERCLOCK_ENABLED
-
-- 0 : Disabled
-- 1 : Enabled
-
-### OVERCLOCK_PROFILE
-
-For example on pico
-
-```
-#      SYS_CLK  | FLASH_CLK | Voltage
-#  1  | 240MHz  |  120MHZ   |  1.10(V)
-#  2  | 266MHz  |  133MHz   |  1.10(V)
-#  3  | 360MHz  |  90MHz    |  1.20(V)
-#  4  | 400MHz  |  100MHz   |  1.30(V)
-#  5  | 416MHz  |  104MHz   |  1.30(V)
-```
-
-Here is an example.
-
-```bash
-cmake -DPICO_BOARD=pico -DOVERCLOCK_ENABLED=1 -DOVERCLOCK_PROFILE=1 .. -G Ninja
-```
-
-which means build for pico, enable overclock, select overclock profile 1.
-
-## More 
-
-On the Raspberry Pi Pico, you can determine the flash operating frequency by setting PICO_FLASH_SPI_CLKDIV. The image below shows the waveform on the Flash CLK pin when the Pico is running at 400 MHz and PICO_FLASH_SPI_CLKDIV is set to 4.
+The flash divider is likewise pico-turbo's: it sets `PICO_FLASH_SPI_CLKDIV`
+itself from the board's ceiling.  The image below is the flash CLK pin measured
+on an earlier build running at 400 MHz with `PICO_FLASH_SPI_CLKDIV=4`; it is kept
+as a measurement, not as the way to set the divider.
 
 ![img](./assets/DS1Z_QuickPrint23.png)
 
 ## Links
 
-- https://github.com/eembc/coremark
+- <https://github.com/eembc/coremark>
